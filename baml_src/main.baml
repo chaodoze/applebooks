@@ -123,31 +123,44 @@ function ExtractStories(chapter_text: string, book_context: string) -> Story[] {
 
     Instructions:
     1. Extract 0 or more Story objects from this chapter
-    2. Each story must be grounded in the chapter text - no external knowledge
-    3. Use "auto_or_uuid" for story_id to auto-generate
-    4. Require provenance for non-trivial claims
-    5. Be conservative with confidence scores
-    6. Extract only factual information, not speculation
-    7. For dates, capture the original text and attempt parsing
-    8. For locations - ALWAYS extract place names mentioned in text:
+    2. Focus on SPECIFIC, CONCRETE stories rather than general summaries:
+       - Extract stories about particular incidents, events, decisions, or actions
+       - Look for grounding details: named people, specific numbers, locations, dates, quotes
+       - A story should have narrative specificity, not just list facts or trends
+
+       ❌ Skip only:
+          - Pure background or context paragraphs without a specific event
+          - Multi-year trend summaries without concrete incidents
+          - Abstract lists of challenges or factors
+
+       ✅ Good story markers (doesn't need all, just some):
+          - Named individuals taking action
+          - Specific amounts, dates, or quantities
+          - Identifiable places or facilities
+          - Clear cause-and-effect or turning points
+          - Direct quotes or specific conflicts
+    3. Each story must be grounded in the chapter text - no external knowledge
+    4. Use "auto_or_uuid" for story_id to auto-generate
+    5. Include provenance when available
+    6. Assign confidence based on narrative detail and specificity (range: 0.5-0.8 is typical)
+    7. Extract only factual information, not speculation
+    8. For dates, capture the original text and attempt parsing
+    9. For locations - ALWAYS extract place names mentioned in text:
        - place_name: REQUIRED - extract the location name
        - lat/lon: OPTIONAL - provide coordinates when possible:
          * If text has exact coordinates → use them, set geo_precision: "exact"
          * For well-known places (major cities, famous buildings, company headquarters) → provide approximate coordinates from your knowledge
          * Set geo_precision appropriately: "approximate-building" (for specific buildings), "approximate-city" (for cities), "approximate-region" (for regions/states)
          * For unknown/ambiguous places → leave lat/lon null
-       - note: REQUIRED - always include original text context (e.g., "Apple headquarters in Cupertino, California" or "Foxconn factory in Shenzhen")
-         This preserves information for future precise geocoding
-       - place_type: factory, headquarters, city, campus, office, lab, etc.
-       Examples:
-         * "Cupertino" → lat: 37.323, lon: -122.032, geo_precision: "approximate-city", note: "Cupertino, California"
-         * "Apple Park" → lat: 37.335, lon: -122.009, geo_precision: "approximate-building", note: "Apple Park headquarters, Cupertino"
-         * "Fountain, Colorado" → lat: 38.682, lon: -104.701, geo_precision: "approximate-city", note: "Fountain, Colorado"
-    9. For people, extract names and roles when mentioned
-    10. For companies, extract names and their relationship to the story
-    11. For products, extract product names and details
-    12. Extract themes, event_type, and tone when evident from the narrative
-    13. Return an empty array if no significant stories are found
+       - note: Include contextual details from the text to help with future geocoding:
+         * When mentioned: year/date, specific function, named entities, size/ownership, story context
+         * Preserve the location's original context from the chapter text
+       - place_type: factory, headquarters, city, campus, office, lab, etc. (when evident)
+    10. For people, extract names and roles when mentioned
+    11. For companies, extract names and their relationship to the story
+    12. For products, extract product names and details
+    13. Extract themes, event_type, and tone when evident from the narrative
+    14. When in doubt, prefer inclusion if the story has concrete grounding details
 
     Return a JSON array of Story objects matching the schema.
   "#
