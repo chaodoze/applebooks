@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["story_id", "title", "summary"],
+    "properties": {
+      "story_id": {
+        "type": "string",
+        "description": "Unique identifier; use 'auto_or_uuid' to let tool generate deterministic UUID"
+      },
+      "title": {
+        "type": "string",
+        "description": "Short descriptive label for the story"
+      },
+      "summary": {
+        "type": "string",
+        "description": "2-3 sentence neutral summary of what happened"
+      },
+      "dates": {
+        "type": "object",
+        "properties": {
+          "asserted_text": {"type": "string"},
+          "parsed": {"type": "string"},
+          "precision": {"type": "string", "enum": ["year", "month", "day", "quarter", "decade"]}
+        }
+      },
+      "locations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "place_name": {"type": "string", "description": "Name of the place (required)"},
+            "lat": {"type": "number", "description": "Latitude coordinate (optional)"},
+            "lon": {"type": "number", "description": "Longitude coordinate (optional)"},
+            "place_type": {"type": "string", "description": "Type of place: office, lab, factory, city, headquarters, campus, etc."},
+            "geo_precision": {"type": "string", "description": "Precision of coordinates: 'exact' (from text), 'approximate-building', 'approximate-city', 'approximate-region', or null if no coordinates"},
+            "visitability": {"type": "string", "description": "public, private, historical"},
+            "note": {"type": "string", "description": "Additional context from text to assist future geocoding (e.g., 'Apple Park headquarters, Cupertino' or 'Foxconn factory in Shenzhen')"}
+          }
+        }
+      },
+      "forward_locale": {
+        "type": "object",
+        "properties": {
+          "place_name": {"type": "string", "description": "Name of the forward-looking location"},
+          "lat": {"type": "number", "description": "Latitude coordinate (optional)"},
+          "lon": {"type": "number", "description": "Longitude coordinate (optional)"},
+          "place_type": {"type": "string", "description": "Type of place"},
+          "geo_precision": {"type": "string", "description": "Precision: 'exact', 'approximate-building', 'approximate-city', 'approximate-region', or null"},
+          "visitability": {"type": "string", "description": "public, private, historical"},
+          "note": {"type": "string", "description": "Context from text for future precise geocoding"}
+        }
+      },
+      "people": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "role_at_time": {"type": "string"},
+            "team": {"type": "string"},
+            "affiliation": {"type": "string"}
+          }
+        }
+      },
+      "products": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "product_line": {"type": "string"},
+            "model": {"type": "string"},
+            "codename": {"type": "string"},
+            "generation": {"type": "string"},
+            "design_language": {"type": "string"}
+          }
+        }
+      },
+      "companies": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "relationship": {"type": "string"}
+          }
+        }
+      },
+      "event_type": {
+        "type": "array",
+        "items": {"type": "string"}
+      },
+      "themes": {
+        "type": "array",
+        "items": {"type": "string"}
+      },
+      "tone": {
+        "type": "array",
+        "items": {"type": "string"}
+      },
+      "business_phase": {"type": "string"},
+      "era": {"type": "string"},
+      "relationships": {
+        "type": "object",
+        "properties": {
+          "contradicts": {"type": "array", "items": {"type": "string"}},
+          "references": {"type": "array", "items": {"type": "string"}},
+          "precedes": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "provenance": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "source_type": {"type": "string"},
+            "citation": {"type": "string"},
+            "isbn": {"type": "string"},
+            "author": {"type": "string"},
+            "pub_year": {"type": "integer"},
+            "quote_snippet": {"type": "string"}
+          }
+        }
+      },
+      "confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "freeform_tags": {
+        "type": "array",
+        "items": {"type": "string"}
+      },
+      "media": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "asset_type": {"type": "string"},
+            "uri": {"type": "string"},
+            "credit": {"type": "string"},
+            "license": {"type": "string"},
+            "date": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}

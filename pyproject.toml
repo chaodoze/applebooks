@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "abx"
+version = "0.1.0"
+description = "Apple Books EPUB extraction with LLM-powered story analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Chao", email = "chao@example.com"}]
+dependencies = [
+    "ebooklib>=0.18",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+    "openai>=1.54.0",
+    "baml-py>=0.63.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "tiktoken>=0.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+    "datasette>=1.0.0",
+]
+
+[project.scripts]
+abx = "abx.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["abx*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]

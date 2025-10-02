@@ -1,0 +1,110 @@
+{
+  "title": "Apple Books Story Archive",
+  "description": "LLM-extracted stories from Apple history books",
+  "databases": {
+    "library": {
+      "tables": {
+        "books": {
+          "sort_desc": "added_at",
+          "label_column": "title"
+        },
+        "chapters": {
+          "sort": "idx",
+          "label_column": "title",
+          "facets": ["book_id"]
+        },
+        "stories": {
+          "sort_desc": "created_at",
+          "label_column": "title",
+          "facets": ["confidence"],
+          "facet_size": 25,
+          "plugins": {
+            "datasette-json-html": {
+              "columns": ["event_types_json", "themes_json", "tone_json"]
+            }
+          }
+        },
+        "story_people": {
+          "sort": "name",
+          "label_column": "name",
+          "facets": ["name", "affiliation", "role_at_time"],
+          "facet_size": 50
+        },
+        "story_companies": {
+          "sort": "name",
+          "label_column": "name",
+          "facets": ["name", "relationship"],
+          "facet_size": 30
+        },
+        "story_products": {
+          "sort": "product_line",
+          "label_column": "model",
+          "facets": ["product_line", "generation", "design_language"],
+          "facet_size": 30
+        },
+        "story_locations": {
+          "sort": "place_name",
+          "label_column": "place_name",
+          "facets": ["place_name", "place_type", "visitability", "is_forward_locale"],
+          "facet_size": 30
+        },
+        "llm_runs": {
+          "sort_desc": "created_at",
+          "facets": ["model", "schema_version"]
+        },
+        "chapter_llm": {
+          "sort": "chapter_id",
+          "facets": ["status", "run_id"]
+        }
+      },
+      "queries": {
+        "stories_per_chapter": {
+          "title": "Stories per chapter",
+          "sql": "SELECT c.book_id, c.idx AS chapter, c.title, COUNT(s.story_id) AS stories FROM chapters c LEFT JOIN stories s USING(chapter_id) GROUP BY c.book_id, c.idx ORDER BY c.book_id, c.idx"
+        },
+        "people_leaderboard": {
+          "title": "People leaderboard",
+          "sql": "SELECT name, COUNT(*) AS mentions, COUNT(DISTINCT story_id) AS stories FROM story_people GROUP BY name ORDER BY mentions DESC LIMIT 50"
+        },
+        "event_type_distribution": {
+          "title": "Event type distribution",
+          "sql": "WITH et AS (SELECT story_id, value AS event_type FROM stories, json_each(event_types_json)) SELECT event_type, COUNT(*) AS stories FROM et GROUP BY event_type ORDER BY stories DESC"
+        },
+        "theme_distribution": {
+          "title": "Theme distribution",
+          "sql": "WITH th AS (SELECT story_id, value AS theme FROM stories, json_each(themes_json)) SELECT theme, COUNT(*) AS stories FROM th GROUP BY theme ORDER BY stories DESC"
+        },
+        "tone_distribution": {
+          "title": "Tone distribution",
+          "sql": "WITH to AS (SELECT story_id, value AS tone FROM stories, json_each(tone_json)) SELECT tone, COUNT(*) AS stories FROM to GROUP BY tone ORDER BY stories DESC"
+        },
+        "map_candidates": {
+          "title": "Map candidates (stories with coordinates)",
+          "sql": "SELECT s.story_id, s.title, l.place_name, l.lat, l.lon, l.is_forward_locale FROM story_locations l JOIN stories s USING(story_id) WHERE l.lat IS NOT NULL AND l.lon IS NOT NULL ORDER BY s.story_id, l.is_forward_locale DESC"
+        },
+        "confidence_buckets": {
+          "title": "Confidence score distribution",
+          "sql": "SELECT ROUND(confidence*10)/10.0 AS bucket, COUNT(*) AS stories FROM stories GROUP BY bucket ORDER BY bucket"
+        },
+        "company_relationships": {
+          "title": "Company relationships",
+          "sql": "SELECT name, relationship, COUNT(*) AS stories FROM story_companies GROUP BY name, relationship ORDER BY stories DESC"
+        },
+        "product_generations": {
+          "title": "Product generations",
+          "sql": "SELECT product_line, generation, COUNT(*) AS mentions FROM story_products WHERE product_line IS NOT NULL GROUP BY product_line, generation ORDER BY product_line, generation"
+        },
+        "usage_summary": {
+          "title": "LLM usage summary",
+          "sql": "SELECT r.run_id, r.model, r.created_at, COUNT(cl.chapter_id) AS chapters, SUM(cl.input_tokens) AS total_input, SUM(cl.output_tokens) AS total_output, ROUND(AVG(cl.duration_ms)) AS avg_duration_ms FROM llm_runs r JOIN chapter_llm cl USING(run_id) GROUP BY r.run_id ORDER BY r.created_at DESC"
+        }
+      }
+    }
+  },
+  "plugins": {
+    "datasette-cluster-map": {
+      "latitude_column": "lat",
+      "longitude_column": "lon"
+    }
+  }
+}
