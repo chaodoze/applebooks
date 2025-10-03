@@ -241,15 +241,21 @@ def clear_cache(db: Path, older_than: str):
 
     # Parse older_than (simple implementation)
     if older_than.endswith("d"):
-        days = int(older_than[:-1])
+        try:
+            days = int(older_than[:-1])
+        except ValueError:
+            console.print("[red]Invalid --older-than format. Use format like '7d', '30d'[/red]")
+            sys.exit(1)
     else:
         console.print("[red]Invalid --older-than format. Use format like '7d', '30d'[/red]")
         sys.exit(1)
 
     conn = sqlite3.connect(db)
 
-    # Delete expired entries
-    cursor = conn.execute(f"DELETE FROM geocode_cache WHERE datetime(fetched_at, '+{days} days') < datetime('now')")
+    # Delete expired entries (using parameterized query for safety)
+    cursor = conn.execute(
+        "DELETE FROM geocode_cache WHERE datetime(fetched_at, '+' || ? || ' days') < datetime('now')", (days,)
+    )
     deleted = cursor.rowcount
 
     conn.commit()

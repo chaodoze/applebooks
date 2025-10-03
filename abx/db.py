@@ -233,6 +233,8 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             FOREIGN KEY(story_id) REFERENCES stories(story_id) ON DELETE CASCADE
         )
     """)
+    # Add index on story_id for faster JOINs and CASCADE deletes
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_story_locations_story_id ON story_locations(story_id)")
 
     # Geocoding cache (7-day URL cache)
     conn.execute("""
@@ -255,13 +257,18 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_geocode_cache_expires_at ON geocode_cache(expires_at)")
 
     # Trigger for automatic geocode cache cleanup
+    # Limit to 100 rows per cleanup to avoid table locking on large caches
     conn.execute("""
         CREATE TRIGGER IF NOT EXISTS geocode_cache_cleanup
         AFTER INSERT ON geocode_cache
         BEGIN
             DELETE FROM geocode_cache
-            WHERE expires_at IS NOT NULL
-              AND datetime(expires_at) < datetime('now');
+            WHERE url_hash IN (
+                SELECT url_hash FROM geocode_cache
+                WHERE expires_at IS NOT NULL
+                  AND datetime(expires_at) < datetime('now')
+                LIMIT 100
+            );
         END
     """)
 

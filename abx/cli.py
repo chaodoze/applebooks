@@ -3,6 +3,7 @@
 import os
 import sys
 import tempfile
+import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -281,8 +282,11 @@ def extract(
             task = progress.add_task("Extracting stories...", total=len(cleaned_chapters))
 
             # Process in parallel using threads (not processes, to avoid BAML serialization issues)
+            # Use a lock to serialize database writes and avoid "database is locked" errors
+            db_lock = threading.Lock()
+
             with ThreadPoolExecutor(max_workers=parallel) as executor:
-                futures = {}
+                futures = []
                 for chapter_id, ch, clean_text in cleaned_chapters:
                     future = executor.submit(
                         _process_chapter_worker,
@@ -293,26 +297,28 @@ def extract(
                         max_input_tokens,
                         retry,
                     )
-                    futures[future] = chapter_id
+                    futures.append(future)
 
                 for future in as_completed(futures):
                     chapter_id, result = future.result()
 
-                    # Store LLM result
-                    store_chapter_llm_result(
-                        conn,
-                        chapter_id,
-                        run_id,
-                        result.status,
-                        result.input_tokens,
-                        result.output_tokens,
-                        result.duration_ms,
-                        result.error,
-                    )
+                    # Serialize database writes to avoid locking issues
+                    with db_lock:
+                        # Store LLM result
+                        store_chapter_llm_result(
+                            conn,
+                            chapter_id,
+                            run_id,
+                            result.status,
+                            result.input_tokens,
+                            result.output_tokens,
+                            result.duration_ms,
+                            result.error,
+                        )
 
-                    # Store stories
-                    if result.stories:
-                        store_stories(conn, chapter_id, result.stories)
+                        # Store stories
+                        if result.stories:
+                            store_stories(conn, chapter_id, result.stories)
 
                     if result.error:
                         warnings.append(f"{chapter_id}: {result.error}")
@@ -343,7 +349,9 @@ def extract(
 
     conn.close()
 
-    # Exit code
+    # Exit code logic:
+    # - Exit 1 if warnings occurred AND --fail-on-warnings is set
+    # - Exit 0 otherwise (including when warnings exist but flag is not set)
     if fail_on_warnings and warnings:
         sys.exit(1)
     else:

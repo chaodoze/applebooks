@@ -166,7 +166,9 @@ def chapterize_epub(book: epub.EpubBook, chapter_limit: int = 999, skip_boilerpl
     return chapters
 
 
-def parse_epub(epub_path: Path, chapter_limit: int = 999, skip_boilerplate: bool = True) -> tuple[BookMetadata, list[Chapter]]:
+def parse_epub(
+    epub_path: Path, chapter_limit: int = 999, skip_boilerplate: bool = True
+) -> tuple[BookMetadata, list[Chapter]]:
     """Parse EPUB and return metadata + chapters."""
     sha256 = compute_book_sha(epub_path)
     book = epub.read_epub(str(epub_path))
