@@ -239,6 +239,8 @@ Separate CLI (`abxgeo`) for enhancing vague locations from ABX with precise addr
   - `resolution_source` - JSON: {url, snippet, geocoder, is_residence}
   - `resolved_at` - Timestamp
   - `resolution_hash` - Idempotency key
+  - `classifier_tier` - Classification tier: 'skip', 'simple', or 'research'
+  - `classifier_reason` - Reasoning from GPT-5-mini classifier
 - **New table**: `geocode_cache` - 7-day URL cache
 
 ### CLI Commands
@@ -269,7 +271,7 @@ abxgeo resolve --db library.sqlite --limit 5 --concurrency 2
 # Dry run to preview
 abxgeo resolve --db library.sqlite --dry-run
 
-# Statistics
+# Statistics (includes classifier tier distribution)
 abxgeo stats --db library.sqlite
 
 # Clear cache
