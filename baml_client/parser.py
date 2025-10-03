@@ -24,6 +24,12 @@ class LlmResponseParser:
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
 
+    def ClassifyLocation(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> types.LocationClassification:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="ClassifyLocation", llm_response=llm_response, mode="request")
+        return typing.cast(types.LocationClassification, result)
+
     def ExtractStories(
         self, llm_response: str, baml_options: BamlCallOptions = {},
     ) -> typing.List["types.Story"]:
@@ -43,6 +49,12 @@ class LlmStreamParser:
 
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
+
+    def ClassifyLocation(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> stream_types.LocationClassification:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="ClassifyLocation", llm_response=llm_response, mode="stream")
+        return typing.cast(stream_types.LocationClassification, result)
 
     def ExtractStories(
         self, llm_response: str, baml_options: BamlCallOptions = {},

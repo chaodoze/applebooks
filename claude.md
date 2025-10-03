@@ -339,6 +339,34 @@ abxgeo clear-cache --db library.sqlite --older-than 7d
   - Can re-run same command to resume from interruption
   - Incremental mode respects high-confidence results
 
+**M8: Two-Tier Classifier Optimization (2025-10-03)**:
+- ✅ **Problem**: First 137 locations showed 51% skip/low-value processing
+  - $0.077/location cost with expensive GPT-5 web search
+  - ~99s median time per location
+  - Many vague country-level locations processed unnecessarily
+- ✅ **Solution**: Pre-classification tier using GPT-5-mini
+  - **Tier 1 - SKIP**: Vague country/region with no specific clues
+    - Returns immediately with 0.2 confidence
+    - No web search, no geocoding
+    - Example: "China" (supplier region, no company name)
+  - **Tier 2 - SIMPLE**: Well-known landmarks/HQs
+    - Geocoding only (no web search)
+    - High confidence (0.85)
+    - Example: "Cupertino, California" → "1 Infinite Loop, Cupertino, CA 95014"
+  - **Tier 3 - RESEARCH**: Specific/inferable locations
+    - Full GPT-5 with web search (original expensive path)
+    - Uses company context and story clues
+    - Example: "Quanta factory" + Taiwan context → research tier
+- ✅ **Context-aware inference**
+  - Recognizes company names (Quanta, Foxconn, Pegatron)
+  - Uses story context for country/region mentions
+  - Considers temporal clues (year, time period)
+  - Example: "Quanta factory" correctly classified as "research" when story mentions Taiwan/year
+- ✅ **Expected savings**:
+  - 57% cost reduction ($0.077 → $0.033/location)
+  - 56% time reduction (~99s → ~44s median)
+  - Based on analysis of first 137 locations (245 skippable, 67 simple, 167 research)
+
 ### Ground Truth Fixtures
 1. **Fountain Factory**: "Apple factory in Fountain, Colorado" → 702 Bandley Dr, Fountain, CO 80817
 2. **Crist Dr Residence**: "Patty Jobs residence, Los Altos" → 2066 Crist Dr, Los Altos, CA 94024 (residence flag)

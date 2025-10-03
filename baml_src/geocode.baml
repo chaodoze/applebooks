@@ -1,6 +1,13 @@
 // BAML functions for precision geocoding
 // Used by abxgeo to resolve vague locations to precise addresses
 
+class LocationClassification {
+  category string @description("One of: 'skip', 'simple', 'research'")
+  reason string @description("Why this category was chosen")
+  simple_address string? @description("If category is 'simple', provide the well-known address (e.g., '1 Infinite Loop, Cupertino, CA')")
+  estimated_precision string? @description("If category is 'simple', estimated precision: 'address', 'city', etc.")
+}
+
 class AddressResolution {
   address string @description("Full street address if found, otherwise most specific location found")
   lat float? @description("Latitude coordinate")
@@ -98,6 +105,82 @@ function FindPreciseAddress(
 }
 
 
+function ClassifyLocation(
+  place_name: string,
+  place_type: string?,
+  note: string?,
+  story_title: string,
+  story_summary: string
+) -> LocationClassification {
+  client GPT5Mini
+  prompt #"
+    You are a location classifier for a geocoding system. Categorize this location into one of three tiers to optimize processing.
+
+    LOCATION:
+    Place Name: {{ place_name }}
+    Place Type: {{ place_type or "unknown" }}
+    Context Note: {{ note or "none" }}
+
+    STORY CONTEXT:
+    Title: {{ story_title }}
+    Summary: {{ story_summary }}
+
+    CATEGORIZATION RULES:
+
+    1. SKIP - Vague country/region with NO specific clues:
+       - Generic country references: "China", "Japan", "Taiwan" WITHOUT company name or city
+       - Notes like "supplier region", "generic reference", "country not specified"
+       - Large regions: "Asia", "Europe", "Middle East" WITHOUT company/factory context
+       → Return category: "skip", reason: why it's too vague
+
+    2. SIMPLE - Well-known landmarks, capitals, or company headquarters:
+       - Famous places: "Beijing" (capital), "Tokyo" (capital), "White House"
+       - Company HQs with context: "Cupertino, California" + Apple → "1 Infinite Loop, Cupertino, CA 95014"
+       - Major landmarks: "Eiffel Tower", "Golden Gate Bridge"
+       → Return category: "simple", simple_address: the well-known address, estimated_precision: address/city
+
+    3. RESEARCH - Specific or inferable locations needing web search:
+       - Explicit location: "Fountain, Colorado factory", "Fremont plant", "Changsha facility"
+       - Company-inferred location: "Quanta factory" (Quanta is Taiwanese → search Taiwan factories)
+       - Context clues: Story mentions country/region/year that narrows down location
+       - Historical sites requiring research
+       - IMPORTANT: If place_name contains a company name (Foxconn, Quanta, Pegatron, etc.):
+         * Check story context for country/region mentions
+         * Use company's known primary locations (e.g., Quanta = Taiwan, Foxconn = China/Taiwan)
+         * If ANY context clue exists (year, country in story, company origin) → RESEARCH
+       → Return category: "research", reason: what needs to be researched and what clues exist
+
+    EXAMPLES:
+
+    ✓ "China" + type: country + note: "Supplier region for multi-touch" + story: generic supply chain
+      → skip (vague country, no specific facility, no company name)
+
+    ✓ "Cupertino, California" + story about Apple + note: "Apple's home base"
+      → simple (1 Infinite Loop, Cupertino, CA 95014)
+
+    ✓ "Beijing" + type: city + note: "Policy document location"
+      → simple (Beijing, China - capital city)
+
+    ✓ "Fountain, Colorado" + type: factory + note: "Apple Macintosh factory, 340,000 sq ft"
+      → research (specific factory needs address lookup)
+
+    ✓ "Japan" + type: country + note: "Canon manufactured LaserWriter"
+      → skip (country-level, no specific Canon factory mentioned, no year/city context)
+
+    ✓ "Quanta factory" + type: factory + note: "(location not specified)" + story: mentions Taiwan supplier, 2010
+      → research (Quanta is Taiwanese company, story has Taiwan context + year → search "Quanta factory Taiwan 2010")
+
+    ✓ "Foxconn facility" + type: factory + note: "iPhone production" + story: supply chain in China
+      → research (Foxconn has China/Taiwan factories, story context mentions China → search specific facility)
+
+    ✓ "Tokyo, Japan" + note: "dinner with Sony executives at exclusive restaurant"
+      → simple (Tokyo, Japan - major city with known coordinates)
+
+    Return JSON with: category, reason, and optionally simple_address + estimated_precision.
+  "#
+}
+
+
 // GeocodeModel client for geocoding (uses gpt-5 with web search)
 client<llm> GeocodeModel {
   provider openai-responses
@@ -111,5 +194,13 @@ client<llm> GeocodeModel {
         type "web_search_preview"
       }
     ]
+  }
+}
+
+// GPT5Mini client for fast classification (cheap, no web search)
+client<llm> GPT5Mini {
+  provider openai-responses
+  options {
+    model "gpt-5-mini"
   }
 }

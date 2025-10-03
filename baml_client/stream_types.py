@@ -23,7 +23,7 @@ class StreamState(BaseModel, typing.Generic[StreamStateValueT]):
     value: StreamStateValueT
     state: typing_extensions.Literal["Pending", "Incomplete", "Complete"]
 # #########################################################################
-# Generated classes (10)
+# Generated classes (11)
 # #########################################################################
 
 class AddressResolution(BaseModel):
@@ -56,6 +56,12 @@ class Location(BaseModel):
     geo_precision: typing.Optional[str] = None
     visitability: typing.Optional[str] = None
     note: typing.Optional[str] = None
+
+class LocationClassification(BaseModel):
+    category: typing.Optional[str] = None
+    reason: typing.Optional[str] = None
+    simple_address: typing.Optional[str] = None
+    estimated_precision: typing.Optional[str] = None
 
 class Media(BaseModel):
     asset_type: typing.Optional[str] = None

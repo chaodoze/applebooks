@@ -41,7 +41,7 @@ def all_succeeded(checks: typing.Dict[CheckName, Check]) -> bool:
 # #########################################################################
 
 # #########################################################################
-# Generated classes (10)
+# Generated classes (11)
 # #########################################################################
 
 class AddressResolution(BaseModel):
@@ -74,6 +74,12 @@ class Location(BaseModel):
     geo_precision: typing.Optional[str] = None
     visitability: typing.Optional[str] = None
     note: typing.Optional[str] = None
+
+class LocationClassification(BaseModel):
+    category: str
+    reason: str
+    simple_address: typing.Optional[str] = None
+    estimated_precision: typing.Optional[str] = None
 
 class Media(BaseModel):
     asset_type: str

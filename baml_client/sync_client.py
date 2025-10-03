@@ -91,6 +91,20 @@ class BamlSyncClient:
     def parse_stream(self):
       return self.__llm_stream_parser
     
+    def ClassifyLocation(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,
+        baml_options: BamlCallOptions = {},
+    ) -> types.LocationClassification:
+        # Check if on_tick is provided
+        if 'on_tick' in baml_options:
+            stream = self.stream.ClassifyLocation(place_name=place_name,place_type=place_type,note=note,story_title=story_title,story_summary=story_summary,
+                baml_options=baml_options)
+            return stream.get_final_response()
+        else:
+            # Original non-streaming code
+            result = self.__options.merge_options(baml_options).call_function_sync(function_name="ClassifyLocation", args={
+                "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,
+            })
+            return typing.cast(types.LocationClassification, result.cast_to(types, types, stream_types, False, __runtime__))
     def ExtractStories(self, chapter_text: str,book_context: str,
         baml_options: BamlCallOptions = {},
     ) -> typing.List["types.Story"]:
@@ -128,6 +142,18 @@ class BamlStreamClient:
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
 
+    def ClassifyLocation(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.BamlSyncStream[stream_types.LocationClassification, types.LocationClassification]:
+        ctx, result = self.__options.merge_options(baml_options).create_sync_stream(function_name="ClassifyLocation", args={
+            "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,
+        })
+        return baml_py.BamlSyncStream[stream_types.LocationClassification, types.LocationClassification](
+          result,
+          lambda x: typing.cast(stream_types.LocationClassification, x.cast_to(types, types, stream_types, True, __runtime__)),
+          lambda x: typing.cast(types.LocationClassification, x.cast_to(types, types, stream_types, False, __runtime__)),
+          ctx,
+        )
     def ExtractStories(self, chapter_text: str,book_context: str,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.BamlSyncStream[typing.List["stream_types.Story"], typing.List["types.Story"]]:
@@ -160,6 +186,13 @@ class BamlHttpRequestClient:
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
 
+    def ClassifyLocation(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        result = self.__options.merge_options(baml_options).create_http_request_sync(function_name="ClassifyLocation", args={
+            "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,
+        }, mode="request")
+        return result
     def ExtractStories(self, chapter_text: str,book_context: str,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.baml_py.HTTPRequest:
@@ -182,6 +215,13 @@ class BamlHttpStreamRequestClient:
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
 
+    def ClassifyLocation(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        result = self.__options.merge_options(baml_options).create_http_request_sync(function_name="ClassifyLocation", args={
+            "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,
+        }, mode="stream")
+        return result
     def ExtractStories(self, chapter_text: str,book_context: str,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.baml_py.HTTPRequest:

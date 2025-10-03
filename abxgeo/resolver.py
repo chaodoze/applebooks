@@ -259,6 +259,100 @@ class LocationResolver:
             print(f"\n=== Resolving: {place_name} ===")
             print(f"Type: {place_type}, Note: {note}")
 
+        # Step 0: Classify location to determine processing tier
+        classification = None
+        try:
+            async with OPENAI_LIMITER:
+                classification = await b.ClassifyLocation(
+                    place_name=place_name,
+                    place_type=place_type,
+                    note=note,
+                    story_title=story_title,
+                    story_summary=story_summary,
+                )
+
+            if self.verbose:
+                print(f"Classification: {classification.category} - {classification.reason}")
+
+        except Exception as e:
+            if self.verbose:
+                print(f"⚠ Classification failed: {str(e)[:100]}, falling back to research tier")
+            classification = None
+
+        # Handle SKIP tier: Return immediately with low confidence
+        if classification and classification.category == "skip":
+            if self.verbose:
+                print(f"→ Skipping (vague location): {classification.reason}")
+
+            return {
+                "story_id": story_id,
+                "loc_idx": loc_idx,
+                "resolved_address": place_name,
+                "resolved_lat": lat,
+                "resolved_lon": lon,
+                "resolved_precision": "country" if place_type == "country" else "region",
+                "resolution_confidence": 0.2,
+                "resolution_source": json.dumps({
+                    "tier": "skip",
+                    "reason": classification.reason,
+                    "url": "N/A",
+                    "snippet": "N/A",
+                    "geocoder": None,
+                    "is_residence": False,
+                    "corroboration": [],
+                    "concerns": ["Location too vague - insufficient context for specific address"],
+                }),
+                "resolved_at": datetime.now().isoformat(),
+            }
+
+        # Handle SIMPLE tier: Just geocode the well-known address
+        if classification and classification.category == "simple" and classification.simple_address:
+            if self.verbose:
+                print(f"→ Simple lookup: {classification.simple_address}")
+
+            geocode_result = None
+            try:
+                if self.geocoder.google:
+                    async with GOOGLE_MAPS_LIMITER:
+                        geocode_result = await asyncio.to_thread(self.geocoder.geocode, classification.simple_address)
+                else:
+                    async with NOMINATIM_LIMITER:
+                        geocode_result = await asyncio.to_thread(self.geocoder.geocode, classification.simple_address)
+
+                if geocode_result and self.verbose:
+                    print(f"Geocoded: {geocode_result['address']}")
+                    print(f"Coords: ({geocode_result['lat']}, {geocode_result['lon']})")
+
+            except Exception as e:
+                if self.verbose:
+                    print(f"⚠ Simple geocoding failed: {str(e)[:100]}")
+
+            # Return simple tier result
+            return {
+                "story_id": story_id,
+                "loc_idx": loc_idx,
+                "resolved_address": geocode_result["address"] if geocode_result else classification.simple_address,
+                "resolved_lat": geocode_result["lat"] if geocode_result else lat,
+                "resolved_lon": geocode_result["lon"] if geocode_result else lon,
+                "resolved_precision": geocode_result["precision"] if geocode_result else classification.estimated_precision or "city",
+                "resolution_confidence": 0.85,  # High confidence for well-known places
+                "resolution_source": json.dumps({
+                    "tier": "simple",
+                    "reason": classification.reason,
+                    "url": "N/A (well-known location)",
+                    "snippet": "N/A",
+                    "geocoder": geocode_result["source"] if geocode_result else None,
+                    "is_residence": False,
+                    "corroboration": [],
+                    "concerns": [],
+                }),
+                "resolved_at": datetime.now().isoformat(),
+            }
+
+        # RESEARCH tier: Use GPT-5 with web search (original expensive path)
+        if self.verbose:
+            print("→ Research tier: Using GPT-5 with web search")
+
         # Step 1: Find precise address using BAML with web search (with rate limiting and retry)
         max_retries = 3
         retry_delay = 1  # Start with 1 second

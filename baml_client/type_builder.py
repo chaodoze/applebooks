@@ -20,7 +20,7 @@ from .globals import DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIM
 class TypeBuilder(type_builder.TypeBuilder):
     def __init__(self):
         super().__init__(classes=set(
-          ["AddressResolution","Company","DateInfo","Location","Media","Person","Product","Provenance","Relationships","Story",]
+          ["AddressResolution","Company","DateInfo","Location","LocationClassification","Media","Person","Product","Provenance","Relationships","Story",]
         ), enums=set(
           []
         ), runtime=DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIME)
@@ -31,7 +31,7 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
     # #########################################################################
-    # Generated classes 10
+    # Generated classes 11
     # #########################################################################
 
     @property
@@ -49,6 +49,10 @@ class TypeBuilder(type_builder.TypeBuilder):
     @property
     def Location(self) -> "LocationViewer":
         return LocationViewer(self)
+
+    @property
+    def LocationClassification(self) -> "LocationClassificationViewer":
+        return LocationClassificationViewer(self)
 
     @property
     def Media(self) -> "MediaViewer":
@@ -82,7 +86,7 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
 # #########################################################################
-# Generated classes 10
+# Generated classes 11
 # #########################################################################
 
 class AddressResolutionAst:
@@ -313,6 +317,57 @@ class LocationProperties:
     @property
     def note(self) -> type_builder.ClassPropertyViewer:
         return type_builder.ClassPropertyViewer(self.__bldr.property("note"))
+    
+    
+
+
+class LocationClassificationAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("LocationClassification")
+        self._properties: typing.Set[str] = set([  "category",  "reason",  "simple_address",  "estimated_precision",  ])
+        self._props = LocationClassificationProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "LocationClassificationProperties":
+        return self._props
+
+
+class LocationClassificationViewer(LocationClassificationAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class LocationClassificationProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def category(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("category"))
+    
+    @property
+    def reason(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("reason"))
+    
+    @property
+    def simple_address(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("simple_address"))
+    
+    @property
+    def estimated_precision(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("estimated_precision"))
     
     
 

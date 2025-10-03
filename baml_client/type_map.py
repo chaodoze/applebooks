@@ -28,6 +28,9 @@ type_map = {
     "types.Location": types.Location,
     "stream_types.Location": stream_types.Location,
 
+    "types.LocationClassification": types.LocationClassification,
+    "stream_types.LocationClassification": stream_types.LocationClassification,
+
     "types.Media": types.Media,
     "stream_types.Media": stream_types.Media,
 
