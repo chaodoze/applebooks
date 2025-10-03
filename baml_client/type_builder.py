@@ -20,7 +20,7 @@ from .globals import DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIM
 class TypeBuilder(type_builder.TypeBuilder):
     def __init__(self):
         super().__init__(classes=set(
-          ["Company","DateInfo","Location","Media","Person","Product","Provenance","Relationships","Story",]
+          ["AddressCandidate","Company","DateInfo","Location","Media","Person","Product","Provenance","Relationships","ScoredCandidate","SearchQuery","Story",]
         ), enums=set(
           []
         ), runtime=DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIME)
@@ -31,8 +31,12 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
     # #########################################################################
-    # Generated classes 9
+    # Generated classes 12
     # #########################################################################
+
+    @property
+    def AddressCandidate(self) -> "AddressCandidateViewer":
+        return AddressCandidateViewer(self)
 
     @property
     def Company(self) -> "CompanyViewer":
@@ -67,6 +71,14 @@ class TypeBuilder(type_builder.TypeBuilder):
         return RelationshipsViewer(self)
 
     @property
+    def ScoredCandidate(self) -> "ScoredCandidateViewer":
+        return ScoredCandidateViewer(self)
+
+    @property
+    def SearchQuery(self) -> "SearchQueryViewer":
+        return SearchQueryViewer(self)
+
+    @property
     def Story(self) -> "StoryViewer":
         return StoryViewer(self)
 
@@ -78,8 +90,79 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
 # #########################################################################
-# Generated classes 9
+# Generated classes 12
 # #########################################################################
+
+class AddressCandidateAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("AddressCandidate")
+        self._properties: typing.Set[str] = set([  "address",  "lat",  "lon",  "precision",  "source_url",  "source_snippet",  "confidence",  "is_residence",  "reasoning",  ])
+        self._props = AddressCandidateProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "AddressCandidateProperties":
+        return self._props
+
+
+class AddressCandidateViewer(AddressCandidateAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class AddressCandidateProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def address(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("address"))
+    
+    @property
+    def lat(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("lat"))
+    
+    @property
+    def lon(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("lon"))
+    
+    @property
+    def precision(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("precision"))
+    
+    @property
+    def source_url(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("source_url"))
+    
+    @property
+    def source_snippet(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("source_snippet"))
+    
+    @property
+    def confidence(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("confidence"))
+    
+    @property
+    def is_residence(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("is_residence"))
+    
+    @property
+    def reasoning(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("reasoning"))
+    
+    
+
 
 class CompanyAst:
     def __init__(self, tb: type_builder.TypeBuilder):
@@ -497,6 +580,104 @@ class RelationshipsProperties:
     @property
     def precedes(self) -> type_builder.ClassPropertyViewer:
         return type_builder.ClassPropertyViewer(self.__bldr.property("precedes"))
+    
+    
+
+
+class ScoredCandidateAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("ScoredCandidate")
+        self._properties: typing.Set[str] = set([  "candidate",  "final_score",  "corroboration",  "concerns",  ])
+        self._props = ScoredCandidateProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "ScoredCandidateProperties":
+        return self._props
+
+
+class ScoredCandidateViewer(ScoredCandidateAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class ScoredCandidateProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def candidate(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("candidate"))
+    
+    @property
+    def final_score(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("final_score"))
+    
+    @property
+    def corroboration(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("corroboration"))
+    
+    @property
+    def concerns(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("concerns"))
+    
+    
+
+
+class SearchQueryAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("SearchQuery")
+        self._properties: typing.Set[str] = set([  "query",  "intent",  "constraints",  ])
+        self._props = SearchQueryProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "SearchQueryProperties":
+        return self._props
+
+
+class SearchQueryViewer(SearchQueryAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class SearchQueryProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def query(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("query"))
+    
+    @property
+    def intent(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("intent"))
+    
+    @property
+    def constraints(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("constraints"))
     
     
 

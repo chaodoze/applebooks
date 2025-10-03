@@ -16,6 +16,9 @@ from . import stream_types
 
 type_map = {
 
+    "types.AddressCandidate": types.AddressCandidate,
+    "stream_types.AddressCandidate": stream_types.AddressCandidate,
+
     "types.Company": types.Company,
     "stream_types.Company": stream_types.Company,
 
@@ -39,6 +42,12 @@ type_map = {
 
     "types.Relationships": types.Relationships,
     "stream_types.Relationships": stream_types.Relationships,
+
+    "types.ScoredCandidate": types.ScoredCandidate,
+    "stream_types.ScoredCandidate": stream_types.ScoredCandidate,
+
+    "types.SearchQuery": types.SearchQuery,
+    "stream_types.SearchQuery": stream_types.SearchQuery,
 
     "types.Story": types.Story,
     "stream_types.Story": stream_types.Story,

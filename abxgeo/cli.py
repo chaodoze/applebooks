@@ -154,9 +154,65 @@ def resolve(
         conn.close()
         sys.exit(0)
 
-    # TODO: Implement actual resolution pipeline
-    console.print("[red]Resolution pipeline not yet implemented[/red]")
-    console.print("[dim]Next steps: Implement resolver.py, query_builder.py, web_harvester.py, etc.[/dim]")
+    # Import resolver
+    from abxgeo.resolver import LocationResolver
+
+    # Initialize resolver
+    google_api_key = None  # TODO: Support Google API key from env/config
+    resolver = LocationResolver(
+        db_path=str(db),
+        user_email=email,
+        google_api_key=google_api_key,
+        verbose=verbose,
+    )
+
+    # Process locations
+    success_count = 0
+    fail_count = 0
+
+    with console.status("[bold green]Resolving locations...") as status:
+        for i, loc in enumerate(locations, 1):
+            status.update(f"[bold green]Resolving {i}/{len(locations)}: {loc['place_name']}")
+
+            # Check if should skip
+            if resolver.should_skip_resolution(
+                story_id=loc["story_id"],
+                loc_idx=loc["loc_idx"],
+                resolved_address=loc["resolved_address"],
+                resolution_confidence=loc["resolution_confidence"],
+                incremental=not batch,
+            ):
+                continue
+
+            # Resolve location
+            try:
+                resolution = resolver.resolve(
+                    story_id=loc["story_id"],
+                    loc_idx=loc["loc_idx"],
+                    place_name=loc["place_name"],
+                    place_type=loc["place_type"],
+                    note=loc["note"],
+                    lat=loc["lat"],
+                    lon=loc["lon"],
+                    geo_precision=loc["geo_precision"],
+                    story_title=loc["story_title"],
+                    story_summary=loc["story_summary"],
+                )
+
+                if resolution:
+                    # Persist resolution
+                    resolver.persist_resolution(resolution)
+                    success_count += 1
+                else:
+                    fail_count += 1
+
+            except Exception as e:
+                console.print(f"[red]Failed to resolve {loc['place_name']}: {e}[/red]")
+                fail_count += 1
+
+    console.print(f"\n[green]✓ Successfully resolved {success_count} locations[/green]")
+    if fail_count > 0:
+        console.print(f"[yellow]⚠ Failed to resolve {fail_count} locations[/yellow]")
 
     conn.close()
 

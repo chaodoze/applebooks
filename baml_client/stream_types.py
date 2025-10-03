@@ -23,8 +23,19 @@ class StreamState(BaseModel, typing.Generic[StreamStateValueT]):
     value: StreamStateValueT
     state: typing_extensions.Literal["Pending", "Incomplete", "Complete"]
 # #########################################################################
-# Generated classes (9)
+# Generated classes (12)
 # #########################################################################
+
+class AddressCandidate(BaseModel):
+    address: typing.Optional[str] = None
+    lat: typing.Optional[float] = None
+    lon: typing.Optional[float] = None
+    precision: typing.Optional[str] = None
+    source_url: typing.Optional[str] = None
+    source_snippet: typing.Optional[str] = None
+    confidence: typing.Optional[float] = None
+    is_residence: typing.Optional[bool] = None
+    reasoning: typing.Optional[str] = None
 
 class Company(BaseModel):
     name: typing.Optional[str] = None
@@ -76,6 +87,17 @@ class Relationships(BaseModel):
     contradicts: typing.Optional[typing.List[str]] = None
     references: typing.Optional[typing.List[str]] = None
     precedes: typing.Optional[typing.List[str]] = None
+
+class ScoredCandidate(BaseModel):
+    candidate: typing.Optional["AddressCandidate"] = None
+    final_score: typing.Optional[float] = None
+    corroboration: typing.List[str]
+    concerns: typing.List[str]
+
+class SearchQuery(BaseModel):
+    query: typing.Optional[str] = None
+    intent: typing.Optional[str] = None
+    constraints: typing.List[str]
 
 class Story(BaseModel):
     story_id: typing.Optional[str] = None

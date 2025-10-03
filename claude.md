@@ -272,11 +272,26 @@ abxgeo clear-cache --db library.sqlite --older-than 7d
 - ✅ Test fixtures with 4 ground truth locations
 - ✅ Dependencies: geopy, requests
 
-**Upcoming Milestones**:
-- M2: BAML functions (query generation, candidate extraction, scoring)
-- M3: Web harvester (OpenAI search + URL fetch + cache)
-- M4: Geocoder cascade (Nominatim → Google → Mapbox)
-- M5: Resolver orchestration + persistence
+**M2-M5 Complete (2025-10-03)**:
+- ✅ M2: BAML functions (query generation, candidate extraction, scoring)
+  - `GenerateSearchQuery`: Creates optimized web search queries
+  - `ExtractAddressCandidates`: Parses search results for addresses
+  - `ScoreAndValidate`: Cross-validates and scores candidates
+  - GeocodeModel client using GPT-5 with medium reasoning effort
+- ✅ M3: Web harvester (DuckDuckGo search + URL fetch + cache)
+  - Simple web scraping for search results (no API key needed)
+  - URL content fetching with 7-day cache
+  - Graceful fallback when search fails
+- ✅ M4: Geocoder cascade (Nominatim → Google fallback)
+  - Primary: Nominatim (free, OpenStreetMap-based)
+  - Fallback: Google Maps (requires API key, optional)
+  - Precision detection: address/street/city/region/country
+  - Reverse geocoding support
+- ✅ M5: Resolver orchestration + persistence
+  - End-to-end pipeline: BAML → web search → geocoding
+  - Idempotent resolution with hash-based tracking
+  - Incremental mode: re-resolve low-confidence locations
+  - Batch processing with progress tracking
 
 ### Ground Truth Fixtures
 1. **Fountain Factory**: "Apple factory in Fountain, Colorado" → 702 Bandley Dr, Fountain, CO 80817

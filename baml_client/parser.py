@@ -24,11 +24,29 @@ class LlmResponseParser:
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
 
+    def ExtractAddressCandidates(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> typing.List["types.AddressCandidate"]:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="ExtractAddressCandidates", llm_response=llm_response, mode="request")
+        return typing.cast(typing.List["types.AddressCandidate"], result)
+
     def ExtractStories(
         self, llm_response: str, baml_options: BamlCallOptions = {},
     ) -> typing.List["types.Story"]:
         result = self.__options.merge_options(baml_options).parse_response(function_name="ExtractStories", llm_response=llm_response, mode="request")
         return typing.cast(typing.List["types.Story"], result)
+
+    def GenerateSearchQuery(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> types.SearchQuery:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="GenerateSearchQuery", llm_response=llm_response, mode="request")
+        return typing.cast(types.SearchQuery, result)
+
+    def ScoreAndValidate(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> types.ScoredCandidate:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="ScoreAndValidate", llm_response=llm_response, mode="request")
+        return typing.cast(types.ScoredCandidate, result)
 
     
 
@@ -38,10 +56,28 @@ class LlmStreamParser:
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
 
+    def ExtractAddressCandidates(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> typing.List["stream_types.AddressCandidate"]:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="ExtractAddressCandidates", llm_response=llm_response, mode="stream")
+        return typing.cast(typing.List["stream_types.AddressCandidate"], result)
+
     def ExtractStories(
         self, llm_response: str, baml_options: BamlCallOptions = {},
     ) -> typing.List["stream_types.Story"]:
         result = self.__options.merge_options(baml_options).parse_response(function_name="ExtractStories", llm_response=llm_response, mode="stream")
         return typing.cast(typing.List["stream_types.Story"], result)
+
+    def GenerateSearchQuery(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> stream_types.SearchQuery:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="GenerateSearchQuery", llm_response=llm_response, mode="stream")
+        return typing.cast(stream_types.SearchQuery, result)
+
+    def ScoreAndValidate(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> stream_types.ScoredCandidate:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="ScoreAndValidate", llm_response=llm_response, mode="stream")
+        return typing.cast(stream_types.ScoredCandidate, result)
 
     
