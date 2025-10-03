@@ -52,3 +52,4 @@ Thumbs.db
 
 # Generated BAML client (tracked, but good to note)
 # baml_client/
+.env

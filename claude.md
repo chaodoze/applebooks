@@ -243,8 +243,11 @@ Separate CLI (`abxgeo`) for enhancing vague locations from ABX with precise addr
 
 ### CLI Commands
 ```bash
-# Setup (optional): Add Google Maps API key for best accuracy
-export GOOGLE_MAPS_API_KEY="your-api-key-here"  # 10k free calls/month
+# Setup (optional): Add Google Maps API key for best accuracy (10k free calls/month)
+# Option 1: Use .env file (recommended, already configured)
+#   Edit .env file and add: GOOGLE_MAPS_API_KEY=your-key-here
+# Option 2: Export to shell
+#   export GOOGLE_MAPS_API_KEY="your-api-key-here"
 
 # Migrate existing database
 abxgeo migrate --db library.sqlite
