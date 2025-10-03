@@ -225,11 +225,89 @@ FROM stories;
   - Still maintains high quality extraction
   - Users can override with custom client config if needed
 
+## ABXGeo - Precision Geocoding (NEW)
+
+### Overview
+Separate CLI (`abxgeo`) for enhancing vague locations from ABX with precise addresses and coordinates using LLM-orchestrated web search + geocoding.
+
+### Schema Version 1.1 (2025-10-02)
+- **New columns in `story_locations`**:
+  - `resolved_address` - Precise street address
+  - `resolved_lat/lon` - Accurate coordinates from geocoder
+  - `resolved_precision` - Level: 'address', 'street', 'city', 'region'
+  - `resolution_confidence` - Score 0.0-1.0
+  - `resolution_source` - JSON: {url, snippet, geocoder, is_residence}
+  - `resolved_at` - Timestamp
+  - `resolution_hash` - Idempotency key
+- **New table**: `geocode_cache` - 7-day URL cache
+
+### CLI Commands
+```bash
+# Migrate existing database
+abxgeo migrate --db library.sqlite
+
+# Resolve all unresolved locations
+abxgeo resolve --db library.sqlite --email you@example.com
+
+# Re-resolve low-confidence locations
+abxgeo resolve --db library.sqlite --email you@example.com --incremental
+
+# Filter by book
+abxgeo resolve --db library.sqlite --email you@example.com --book-id book_abc123
+
+# Dry run to preview
+abxgeo resolve --db library.sqlite --email you@example.com --dry-run
+
+# Statistics
+abxgeo stats --db library.sqlite
+
+# Clear cache
+abxgeo clear-cache --db library.sqlite --older-than 7d
+```
+
+### Implementation Status
+**M1 Complete (2025-10-02)**:
+- ✅ Schema migration (v1.0 → v1.1)
+- ✅ CLI scaffold with commands: resolve, migrate, stats, clear-cache
+- ✅ Test fixtures with 4 ground truth locations
+- ✅ Dependencies: geopy, requests
+
+**Upcoming Milestones**:
+- M2: BAML functions (query generation, candidate extraction, scoring)
+- M3: Web harvester (OpenAI search + URL fetch + cache)
+- M4: Geocoder cascade (Nominatim → Google → Mapbox)
+- M5: Resolver orchestration + persistence
+
+### Ground Truth Fixtures
+1. **Fountain Factory**: "Apple factory in Fountain, Colorado" → 702 Bandley Dr, Fountain, CO 80817
+2. **Crist Dr Residence**: "Patty Jobs residence, Los Altos" → 2066 Crist Dr, Los Altos, CA 94024 (residence flag)
+3. **One Infinite Loop**: Apple HQ Cupertino → 1 Infinite Loop, Cupertino, CA 95014
+4. **Fremont Factory**: Macintosh plant → 6400 Dumbarton Cir, Fremont, CA 94555
+
+### File Structure
+```
+applebooks/
+├── abx/                    # Story extraction (existing)
+├── abxgeo/                 # Precision geocoding (NEW)
+│   ├── __init__.py
+│   ├── cli.py             # CLI commands
+│   ├── db_migrate.py      # Schema v1.0 → v1.1
+│   ├── resolver.py        # TODO: Core pipeline
+│   ├── query_builder.py   # TODO: BAML query generation
+│   ├── web_harvester.py   # TODO: Search + fetch
+│   ├── geocoder.py        # TODO: Geocoder cascade
+│   └── persistence.py     # TODO: Write results
+├── baml_src/
+│   └── geocode.baml       # TODO: BAML functions
+├── tests/
+│   └── test_resolver.py   # Ground truth tests
+└── pyproject.toml         # Updated with geopy, requests
+```
+
 ## Future Improvements
 - Add chunking for very long chapters (>100k tokens)
 - Implement story linking via relationships field
 - Add EDTF date parsing for date_start/date_end
 - Create map visualization using story_locations
 - Add confidence-based filtering in Datasette
-- Phase 2 geocoding: Post-process locations with GeoPy + Nominatim
-- Phase 3 geocoding: Real-time function calling during extraction
+- if baml file is modified, always regenerate baml code when asked to do another extraction

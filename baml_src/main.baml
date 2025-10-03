@@ -133,12 +133,13 @@ function ExtractStories(chapter_text: string, book_context: string) -> Story[] {
           - Multi-year trend summaries without concrete incidents
           - Abstract lists of challenges or factors
 
-       ✅ Good story markers (doesn't need all, just some):
-          - Named individuals taking action
-          - Specific amounts, dates, or quantities
-          - Identifiable places or facilities
+       ✅ Good story markers (include a good strong marker or if story has a few):
+          - Named individuals taking action or making decisions (especially main characters like Jobs, Cook, Wozniak, Sculley etc.)
+          - Specific amounts, dates, or quantities (e.g., "50,000 units", "March 1984")
+          - Identifiable places or facilities (e.g., "Cupertino factory", "Bandley Drive")
           - Clear cause-and-effect or turning points
-          - Direct quotes or specific conflicts
+          - Direct quotes or specific conflicts between people/companies
+          - Concrete products, prototypes, or technical decisions
     3. Each story must be grounded in the chapter text - no external knowledge
     4. Use "auto_or_uuid" for story_id to auto-generate
     5. Include provenance when available

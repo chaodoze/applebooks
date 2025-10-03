@@ -3,7 +3,42 @@
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
+
+
+def _migrate_v1_0_to_v1_1(conn: sqlite3.Connection):
+    """Migrate database schema from v1.0 to v1.1 (add geocoding columns)."""
+    # Add new columns to story_locations
+    conn.execute("ALTER TABLE story_locations ADD COLUMN resolved_address TEXT")
+    conn.execute("ALTER TABLE story_locations ADD COLUMN resolved_lat REAL")
+    conn.execute("ALTER TABLE story_locations ADD COLUMN resolved_lon REAL")
+    conn.execute("ALTER TABLE story_locations ADD COLUMN resolved_precision TEXT")
+    conn.execute("ALTER TABLE story_locations ADD COLUMN resolution_confidence REAL")
+    conn.execute("ALTER TABLE story_locations ADD COLUMN resolution_source TEXT")
+    conn.execute("ALTER TABLE story_locations ADD COLUMN resolved_at TEXT")
+    conn.execute("ALTER TABLE story_locations ADD COLUMN resolution_hash TEXT")
+
+    # Create geocode_cache table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS geocode_cache (
+            url_hash    TEXT PRIMARY KEY,
+            url         TEXT NOT NULL,
+            title       TEXT,
+            content     TEXT,
+            fetched_at  TEXT DEFAULT (datetime('now')),
+            expires_at  TEXT
+        )
+    """)
+
+    # Add indexes
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_story_locations_resolution_hash ON story_locations(resolution_hash)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_story_locations_resolved_at ON story_locations(resolved_at)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_story_locations_resolution_confidence ON story_locations(resolution_confidence)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_geocode_cache_expires_at ON geocode_cache(expires_at)")
+
+    conn.commit()
 
 
 def init_db(db_path: Path) -> sqlite3.Connection:
@@ -11,6 +46,18 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
+
+    # Get current schema version from database
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='books'")
+    db_exists = cursor.fetchone() is not None
+
+    if db_exists:
+        cursor = conn.execute("PRAGMA table_info(story_locations)")
+        columns = {row[1] for row in cursor.fetchall()}
+
+        # Migrate from v1.0 to v1.1 if needed
+        if "resolved_address" not in columns:
+            _migrate_v1_0_to_v1_1(conn)
 
     # Books
     conn.execute("""
@@ -174,9 +221,48 @@ def init_db(db_path: Path) -> sqlite3.Connection:
             visitability   TEXT,
             note           TEXT,
             is_forward_locale INTEGER DEFAULT 0,
+            resolved_address TEXT,
+            resolved_lat   REAL,
+            resolved_lon   REAL,
+            resolved_precision TEXT,
+            resolution_confidence REAL,
+            resolution_source TEXT,
+            resolved_at    TEXT,
+            resolution_hash TEXT,
             PRIMARY KEY(story_id, loc_idx),
             FOREIGN KEY(story_id) REFERENCES stories(story_id) ON DELETE CASCADE
         )
+    """)
+
+    # Geocoding cache (7-day URL cache)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS geocode_cache (
+            url_hash    TEXT PRIMARY KEY,
+            url         TEXT NOT NULL,
+            title       TEXT,
+            content     TEXT,
+            fetched_at  TEXT DEFAULT (datetime('now')),
+            expires_at  TEXT
+        )
+    """)
+
+    # Indexes for geocoding columns (only if not already created by migration)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_story_locations_resolution_hash ON story_locations(resolution_hash)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_story_locations_resolved_at ON story_locations(resolved_at)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_story_locations_resolution_confidence ON story_locations(resolution_confidence)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_geocode_cache_expires_at ON geocode_cache(expires_at)")
+
+    # Trigger for automatic geocode cache cleanup
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS geocode_cache_cleanup
+        AFTER INSERT ON geocode_cache
+        BEGIN
+            DELETE FROM geocode_cache
+            WHERE expires_at IS NOT NULL
+              AND datetime(expires_at) < datetime('now');
+        END
     """)
 
     # LLM runs

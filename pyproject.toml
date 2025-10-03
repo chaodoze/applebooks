@@ -19,6 +19,8 @@ dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
     "tiktoken>=0.7.0",
+    "geopy>=2.4.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +32,7 @@ dev = [
 
 [project.scripts]
 abx = "abx.cli:main"
+abxgeo = "abxgeo.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

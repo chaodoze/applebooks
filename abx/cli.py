@@ -4,7 +4,7 @@ import os
 import sys
 import tempfile
 import uuid
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import click
@@ -36,6 +36,11 @@ from abx.persistence import (
 console = Console()
 
 
+def _process_chapter_worker(chapter_id, clean_text, book_context, model, max_input_tokens, retry):
+    """Worker function for parallel chapter processing using threads."""
+    return chapter_id, extract_stories_sync(clean_text, book_context, model, max_input_tokens, retry)
+
+
 @click.group()
 def cli():
     """ABX - Apple Books EPUB extraction with LLM-powered story analysis."""
@@ -50,8 +55,18 @@ def cli():
 @click.option("--batch/--no-batch", default=True, help="Use batch mode (default: on)")
 @click.option("--sync", is_flag=True, help="Force synchronous mode")
 @click.option("--parallel", default=4, help="Parallel workers for local processing")
-@click.option("--clean-html", "clean_html_mode", type=click.Choice(["loose", "strict"]), default="loose", help="HTML cleaning mode")
-@click.option("--skip-boilerplate/--no-skip-boilerplate", default=True, help="Skip boilerplate chapters (copyright, contents, etc.)")
+@click.option(
+    "--clean-html",
+    "clean_html_mode",
+    type=click.Choice(["loose", "strict"]),
+    default="loose",
+    help="HTML cleaning mode",
+)
+@click.option(
+    "--skip-boilerplate/--no-skip-boilerplate",
+    default=True,
+    help="Skip boilerplate chapters (copyright, contents, etc.)",
+)
 @click.option("--chapter-limit", default=999, help="Max chapters to process")
 @click.option("--retry", default=3, help="LLM retry attempts")
 @click.option("--max-input-tokens", default=0, help="Max input tokens (0 = no limit)")
@@ -130,7 +145,7 @@ def extract(
     ) as progress:
         task = progress.add_task("Cleaning chapters...", total=len(chapters))
 
-        with ProcessPoolExecutor(max_workers=parallel) as executor:
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
             futures = {executor.submit(clean_html, ch.html_content, clean_html_mode): ch for ch in chapters}
 
             for future in as_completed(futures):
@@ -249,8 +264,8 @@ def extract(
                     progress.update(task, advance=1)
 
     else:
-        # Synchronous mode
-        console.print("[cyan]Running synchronous extraction...[/cyan]")
+        # Synchronous mode (with parallel processing)
+        console.print(f"[cyan]Running synchronous extraction with {parallel} workers...[/cyan]")
 
         # Store run
         store_llm_run(conn, run_id, book_id, resolved_model, prompt_hash, baml_version)
@@ -265,29 +280,44 @@ def extract(
         ) as progress:
             task = progress.add_task("Extracting stories...", total=len(cleaned_chapters))
 
-            for chapter_id, ch, clean_text in cleaned_chapters:
-                result = extract_stories_sync(clean_text, book_context, resolved_model, max_input_tokens, retry)
+            # Process in parallel using threads (not processes, to avoid BAML serialization issues)
+            with ThreadPoolExecutor(max_workers=parallel) as executor:
+                futures = {}
+                for chapter_id, ch, clean_text in cleaned_chapters:
+                    future = executor.submit(
+                        _process_chapter_worker,
+                        chapter_id,
+                        clean_text,
+                        book_context,
+                        resolved_model,
+                        max_input_tokens,
+                        retry,
+                    )
+                    futures[future] = chapter_id
 
-                # Store LLM result
-                store_chapter_llm_result(
-                    conn,
-                    chapter_id,
-                    run_id,
-                    result.status,
-                    result.input_tokens,
-                    result.output_tokens,
-                    result.duration_ms,
-                    result.error,
-                )
+                for future in as_completed(futures):
+                    chapter_id, result = future.result()
 
-                # Store stories
-                if result.stories:
-                    store_stories(conn, chapter_id, result.stories)
+                    # Store LLM result
+                    store_chapter_llm_result(
+                        conn,
+                        chapter_id,
+                        run_id,
+                        result.status,
+                        result.input_tokens,
+                        result.output_tokens,
+                        result.duration_ms,
+                        result.error,
+                    )
 
-                if result.error:
-                    warnings.append(f"{chapter_id}: {result.error}")
+                    # Store stories
+                    if result.stories:
+                        store_stories(conn, chapter_id, result.stories)
 
-                progress.update(task, advance=1)
+                    if result.error:
+                        warnings.append(f"{chapter_id}: {result.error}")
+
+                    progress.update(task, advance=1)
 
     # Summary
     cursor = conn.execute("SELECT COUNT(*) FROM stories")
@@ -314,9 +344,7 @@ def extract(
     conn.close()
 
     # Exit code
-    if warnings and fail_on_warnings:
-        sys.exit(1)
-    elif warnings:
+    if fail_on_warnings and warnings:
         sys.exit(1)
     else:
         sys.exit(0)
