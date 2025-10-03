@@ -39,12 +39,20 @@ def migrate_v1_0_to_v1_1(conn: sqlite3.Connection) -> None:
         ("resolution_source", "TEXT"),
         ("resolved_at", "TEXT"),
         ("resolution_hash", "TEXT"),
+        ("classifier_tier", "TEXT"),
+        ("classifier_reason", "TEXT"),
     ]
 
     for col_name, col_type in new_columns:
         if col_name not in columns:
             console.print(f"[dim]Adding column: {col_name}[/dim]")
             conn.execute(f"ALTER TABLE story_locations ADD COLUMN {col_name} {col_type}")
+
+    # Create index for classifier_tier if it doesn't exist
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_story_locations_classifier_tier ON story_locations(classifier_tier)")
+    except sqlite3.OperationalError:
+        pass  # Index already exists
 
     # Create geocode_cache table if not exists
     conn.execute("""

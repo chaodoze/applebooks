@@ -320,6 +320,16 @@ def stats(db: Path):
     cursor = conn.execute("SELECT AVG(resolution_confidence) FROM story_locations WHERE resolved_address IS NOT NULL")
     avg_confidence = cursor.fetchone()[0] or 0.0
 
+    # Classifier tier stats
+    cursor = conn.execute("""
+        SELECT classifier_tier, COUNT(*) as count
+        FROM story_locations
+        WHERE classifier_tier IS NOT NULL
+        GROUP BY classifier_tier
+        ORDER BY count DESC
+    """)
+    by_tier = cursor.fetchall()
+
     # Display stats
     table = Table(title="Geocoding Resolution Statistics")
     table.add_column("Metric", style="cyan")
@@ -333,6 +343,21 @@ def stats(db: Path):
 
     console.print(table)
     console.print()
+
+    if by_tier:
+        tier_table = Table(title="Classifier Tier Distribution")
+        tier_table.add_column("Tier", style="cyan")
+        tier_table.add_column("Count", style="green")
+        tier_table.add_column("Percentage", style="yellow")
+
+        for row in by_tier:
+            tier = row["classifier_tier"] or "unknown"
+            count = row["count"]
+            pct = (count / resolved * 100) if resolved > 0 else 0
+            tier_table.add_row(tier, str(count), f"{pct:.1f}%")
+
+        console.print(tier_table)
+        console.print()
 
     if by_precision:
         prec_table = Table(title="By Precision Level")

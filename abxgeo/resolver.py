@@ -183,7 +183,9 @@ class LocationResolver:
                     resolution_confidence = ?,
                     resolution_source = ?,
                     resolved_at = ?,
-                    resolution_hash = ?
+                    resolution_hash = ?,
+                    classifier_tier = ?,
+                    classifier_reason = ?
                 WHERE story_id = ? AND loc_idx = ?
                 """,
                 (
@@ -195,6 +197,8 @@ class LocationResolver:
                     resolution["resolution_source"],
                     resolution["resolved_at"],
                     resolution_hash,
+                    resolution.get("classifier_tier"),
+                    resolution.get("classifier_reason"),
                     resolution["story_id"],
                     resolution["loc_idx"],
                 ),
@@ -303,6 +307,8 @@ class LocationResolver:
                     "concerns": ["Location too vague - insufficient context for specific address"],
                 }),
                 "resolved_at": datetime.now().isoformat(),
+                "classifier_tier": "skip",
+                "classifier_reason": classification.reason,
             }
 
         # Handle SIMPLE tier: Just geocode the well-known address
@@ -347,6 +353,8 @@ class LocationResolver:
                     "concerns": [],
                 }),
                 "resolved_at": datetime.now().isoformat(),
+                "classifier_tier": "simple",
+                "classifier_reason": classification.reason,
             }
 
         # RESEARCH tier: Use GPT-5 with web search (original expensive path)
@@ -452,6 +460,8 @@ class LocationResolver:
                 }
             ),
             "resolved_at": datetime.now().isoformat(),
+            "classifier_tier": "research" if classification else "research",
+            "classifier_reason": classification.reason if classification else "Classification failed, defaulted to research tier",
         }
 
         return result
