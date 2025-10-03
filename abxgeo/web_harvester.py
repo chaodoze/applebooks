@@ -90,6 +90,10 @@ class WebHarvester:
         Returns:
             URL content as text, or None if fetch failed
         """
+        # Fix relative URLs from DuckDuckGo (start with //)
+        if url.startswith("//"):
+            url = "https:" + url
+
         # Check cache first
         if use_cache:
             cached = self._get_cached_content(url)

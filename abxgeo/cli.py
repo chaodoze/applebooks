@@ -1,14 +1,21 @@
 """CLI for ABXGeo precision geocoding."""
 
+import asyncio
+import os
 import sqlite3
 import sys
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 from rich.console import Console
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from abxgeo.db_migrate import migrate_db
+
+# Load .env file
+load_dotenv()
 
 console = Console()
 
@@ -21,22 +28,26 @@ def cli():
 
 @cli.command()
 @click.option("--db", required=True, type=click.Path(exists=True, path_type=Path), help="Path to SQLite database")
-@click.option("--email", required=True, help="Email for Nominatim geocoder compliance")
+@click.option("--email", help="Email for Nominatim geocoder (reads from ABXGEO_EMAIL env var if not provided)")
 @click.option("--batch/--incremental", default=True, help="Batch (all unresolved) or incremental (low confidence)")
 @click.option("--filter", "filter_clause", help="SQL WHERE clause for filtering locations")
 @click.option("--book-id", help="Filter by book_id (shorthand)")
 @click.option("--confidence-threshold", default=0.7, type=float, help="Re-resolve if confidence < threshold")
 @click.option("--model", default="auto", help="Model name (auto = best available)")
+@click.option("--concurrency", default=10, type=int, help="Number of parallel workers (default: 10)")
+@click.option("--limit", type=int, help="Limit number of locations to resolve (for testing)")
 @click.option("--dry-run", is_flag=True, help="Show proposed changes without writing")
 @click.option("--verbose", is_flag=True, help="Verbose output")
 def resolve(
     db: Path,
-    email: str,
+    email: str | None,
     batch: bool,
     filter_clause: str | None,
     book_id: str | None,
     confidence_threshold: float,
     model: str,
+    concurrency: int,
+    limit: int | None,
     dry_run: bool,
     verbose: bool,
 ):
@@ -60,6 +71,15 @@ def resolve(
         abxgeo resolve --db library.sqlite --email you@example.com --dry-run
     """
     console.print("[bold cyan]ABXGeo - Precision Geocoding[/bold cyan]\n")
+
+    # Get email from environment if not provided
+    if not email:
+        email = os.getenv("ABXGEO_EMAIL")
+        if not email:
+            console.print(
+                "[red]Error: Email required. Provide via --email flag or set ABXGEO_EMAIL environment variable.[/red]"
+            )
+            sys.exit(1)
 
     # Ensure database is migrated
     migrate_db(db)
@@ -110,6 +130,9 @@ def resolve(
         ORDER BY sl.story_id, sl.loc_idx
     """
 
+    if limit:
+        query += f" LIMIT {limit}"
+
     if verbose:
         console.print(f"[dim]Query: {query}[/dim]\n")
 
@@ -154,6 +177,26 @@ def resolve(
         conn.close()
         sys.exit(0)
 
+    # Filter locations that need resolution
+    filtered_locations = []
+    for loc in locations:
+        # Skip if already resolved with high confidence (incremental mode only)
+        if (
+            not batch
+            and loc["resolved_address"]
+            and loc["resolution_confidence"]
+            and loc["resolution_confidence"] >= confidence_threshold
+        ):
+            continue
+        filtered_locations.append(dict(loc))
+
+    if not filtered_locations:
+        console.print("[yellow]No locations need resolution (all already resolved with high confidence)[/yellow]")
+        conn.close()
+        sys.exit(0)
+
+    console.print(f"[green]Will resolve {len(filtered_locations)} locations with {concurrency} workers[/green]\n")
+
     # Import resolver
     from abxgeo.resolver import LocationResolver
 
@@ -164,49 +207,40 @@ def resolve(
         verbose=verbose,
     )
 
-    # Process locations
-    success_count = 0
-    fail_count = 0
+    # Process locations in parallel with async
+    async def resolve_all():
+        # Run batch resolution
+        results = await resolver.resolve_batch(filtered_locations, concurrency=concurrency)
 
-    with console.status("[bold green]Resolving locations...") as status:
-        for i, loc in enumerate(locations, 1):
-            status.update(f"[bold green]Resolving {i}/{len(locations)}: {loc['place_name']}")
+        # Persist all successful resolutions
+        success_count = 0
+        fail_count = 0
 
-            # Check if should skip
-            if resolver.should_skip_resolution(
-                story_id=loc["story_id"],
-                loc_idx=loc["loc_idx"],
-                resolved_address=loc["resolved_address"],
-                resolution_confidence=loc["resolution_confidence"],
-                incremental=not batch,
-            ):
-                continue
-
-            # Resolve location
-            try:
-                resolution = resolver.resolve(
-                    story_id=loc["story_id"],
-                    loc_idx=loc["loc_idx"],
-                    place_name=loc["place_name"],
-                    place_type=loc["place_type"],
-                    note=loc["note"],
-                    lat=loc["lat"],
-                    lon=loc["lon"],
-                    geo_precision=loc["geo_precision"],
-                    story_title=loc["story_title"],
-                    story_summary=loc["story_summary"],
-                )
-
-                if resolution:
-                    # Persist resolution
-                    resolver.persist_resolution(resolution)
-                    success_count += 1
-                else:
-                    fail_count += 1
-
-            except Exception as e:
-                console.print(f"[red]Failed to resolve {loc['place_name']}: {e}[/red]")
+        for resolution in results:
+            if resolution:
+                resolver.persist_resolution(resolution)
+                success_count += 1
+            else:
                 fail_count += 1
+
+        return success_count, fail_count
+
+    # Run async resolution with progress bar
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("•"),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task(f"Resolving {len(filtered_locations)} locations...", total=len(filtered_locations))
+
+        # Run async batch (progress will update as tasks complete)
+        success_count, fail_count = asyncio.run(resolve_all())
+
+        progress.update(task, completed=len(filtered_locations))
 
     console.print(f"\n[green]✓ Successfully resolved {success_count} locations[/green]")
     if fail_count > 0:

@@ -18,6 +18,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from abxgeo.geocoder import GeocoderCascade
+from abxgeo.rate_limiter import GOOGLE_MAPS_LIMITER, NOMINATIM_LIMITER, OPENAI_LIMITER
 from abxgeo.web_harvester import WebHarvester
 from baml_client import b
 
@@ -59,9 +60,9 @@ class LocationResolver:
         )
 
         if self.verbose and google_api_key:
-            print(f"✓ Google Maps API key configured (cascade: Google → Nominatim)")
+            print("✓ Google Maps API key configured (cascade: Google → Nominatim)")
         elif self.verbose:
-            print(f"⚠ No Google Maps API key (using Nominatim only)")
+            print("⚠ No Google Maps API key (using Nominatim only)")
 
     def resolve(
         self,
@@ -293,3 +294,192 @@ class LocationResolver:
             return True
 
         return False
+
+    async def resolve_async(
+        self,
+        story_id: str,
+        loc_idx: int,
+        place_name: str,
+        place_type: str | None,
+        note: str | None,
+        lat: float | None,
+        lon: float | None,
+        geo_precision: str | None,
+        story_title: str,
+        story_summary: str,
+    ) -> dict | None:
+        """
+        Async version of resolve() for parallel processing.
+
+        Same arguments and return value as resolve(), but uses native async/await.
+        """
+        if self.verbose:
+            print(f"\n=== Resolving: {place_name} ===")
+            print(f"Type: {place_type}, Note: {note}")
+
+        # Step 1: Generate search query using BAML (with rate limiting)
+        try:
+            async with OPENAI_LIMITER:
+                search_query_obj = await b.GenerateSearchQuery(
+                    place_name=place_name,
+                    place_type=place_type,
+                    note=note,
+                    story_title=story_title,
+                    story_summary=story_summary,
+                )
+                search_query = search_query_obj.query
+
+            if self.verbose:
+                print(f"Search query: {search_query}")
+
+        except Exception as e:
+            print(f"Failed to generate search query: {e}")
+            return None
+
+        # Step 2: Search web and fetch content (run in thread pool)
+        try:
+            search_results = await asyncio.to_thread(self.harvester.harvest, search_query, 5)
+
+            if self.verbose:
+                print(f"Search results length: {len(search_results)} chars")
+
+        except Exception as e:
+            print(f"Failed to harvest web content: {e}")
+            return None
+
+        # Step 3: Extract address candidates using BAML (with rate limiting)
+        try:
+            story_context = f"{story_title}: {story_summary}"
+
+            async with OPENAI_LIMITER:
+                candidates = await b.ExtractAddressCandidates(
+                    search_results=search_results,
+                    place_name=place_name,
+                    story_context=story_context,
+                )
+
+            if self.verbose:
+                print(f"Found {len(candidates)} candidates")
+                for i, cand in enumerate(candidates, 1):
+                    print(f"  {i}. {cand.address} (confidence: {cand.confidence})")
+
+        except Exception as e:
+            print(f"Failed to extract candidates: {e}")
+            return None
+
+        # If no candidates, return early
+        if not candidates:
+            if self.verbose:
+                print("No candidates found")
+            return None
+
+        # Step 4: Score and validate using BAML (with rate limiting)
+        try:
+            original_coords = f"{lat},{lon}" if lat and lon else None
+
+            async with OPENAI_LIMITER:
+                scored = await b.ScoreAndValidate(
+                    candidates=candidates,
+                    place_name=place_name,
+                    original_coords=original_coords,
+                )
+
+            best_candidate = scored.candidate
+            final_score = scored.final_score
+
+            if self.verbose:
+                print(f"Best candidate: {best_candidate.address}")
+                print(f"Final score: {final_score}")
+                print(f"Corroboration: {scored.corroboration}")
+                print(f"Concerns: {scored.concerns}")
+
+        except Exception as e:
+            print(f"Failed to score candidates: {e}")
+            return None
+
+        # Step 5: Geocode the best candidate address (run in thread pool with rate limiting)
+        geocode_result = None
+        if best_candidate.address:
+            try:
+                # Use appropriate rate limiter based on geocoder
+                if self.geocoder.google:
+                    async with GOOGLE_MAPS_LIMITER:
+                        geocode_result = await asyncio.to_thread(self.geocoder.geocode, best_candidate.address)
+                else:
+                    async with NOMINATIM_LIMITER:
+                        geocode_result = await asyncio.to_thread(self.geocoder.geocode, best_candidate.address)
+
+                if geocode_result and self.verbose:
+                    print(f"Geocoded: {geocode_result['address']}")
+                    print(f"Coords: ({geocode_result['lat']}, {geocode_result['lon']})")
+                    print(f"Precision: {geocode_result['precision']}")
+
+            except Exception as e:
+                print(f"Failed to geocode: {e}")
+
+        # Step 6: Build resolution result
+        result = {
+            "story_id": story_id,
+            "loc_idx": loc_idx,
+            "resolved_address": best_candidate.address,
+            "resolved_lat": geocode_result["lat"] if geocode_result else best_candidate.lat,
+            "resolved_lon": geocode_result["lon"] if geocode_result else best_candidate.lon,
+            "resolved_precision": geocode_result["precision"] if geocode_result else best_candidate.precision,
+            "resolution_confidence": final_score,
+            "resolution_source": json.dumps(
+                {
+                    "url": best_candidate.source_url,
+                    "snippet": best_candidate.source_snippet,
+                    "geocoder": geocode_result["source"] if geocode_result else None,
+                    "is_residence": best_candidate.is_residence,
+                    "corroboration": scored.corroboration,
+                    "concerns": scored.concerns,
+                }
+            ),
+            "resolved_at": datetime.now().isoformat(),
+        }
+
+        return result
+
+    async def resolve_batch(
+        self,
+        locations: list[dict],
+        concurrency: int = 10,
+    ) -> list[dict | None]:
+        """
+        Resolve multiple locations in parallel.
+
+        Args:
+            locations: List of location dictionaries (from SQL query)
+            concurrency: Maximum number of concurrent resolutions
+
+        Returns:
+            List of resolution results (None for failed resolutions)
+        """
+        # Create semaphore for overall concurrency control
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def resolve_with_semaphore(loc):
+            async with semaphore:
+                try:
+                    return await self.resolve_async(
+                        story_id=loc["story_id"],
+                        loc_idx=loc["loc_idx"],
+                        place_name=loc["place_name"],
+                        place_type=loc["place_type"],
+                        note=loc["note"],
+                        lat=loc["lat"],
+                        lon=loc["lon"],
+                        geo_precision=loc["geo_precision"],
+                        story_title=loc["story_title"],
+                        story_summary=loc["story_summary"],
+                    )
+                except Exception as e:
+                    print(f"Error resolving {loc['place_name']}: {e}")
+                    return None
+
+        # Resolve all locations in parallel
+        results = await asyncio.gather(*[resolve_with_semaphore(loc) for loc in locations], return_exceptions=True)
+
+        # Convert exceptions to None
+        return [r if not isinstance(r, Exception) else None for r in results]

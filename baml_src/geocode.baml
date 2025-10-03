@@ -176,11 +176,18 @@ function ScoreAndValidate(
   "#
 }
 
-// GeocodeModel client for geocoding (uses gpt-5 with medium reasoning effort)
+// GeocodeModel client for geocoding (uses gpt-5 with web search)
 client<llm> GeocodeModel {
-  provider openai
+  provider openai-responses
   options {
-    model gpt-5
-    reasoning_effort medium
+    model "gpt-5"
+    reasoning {
+      effort "medium"
+    }
+    tools [
+      {
+        type "web_search_preview"
+      }
+    ]
   }
 }
