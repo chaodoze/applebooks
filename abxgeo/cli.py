@@ -207,21 +207,50 @@ def resolve(
         verbose=verbose,
     )
 
-    # Process locations in parallel with async
-    async def resolve_all():
-        # Run batch resolution
-        results = await resolver.resolve_batch(filtered_locations, concurrency=concurrency)
-
-        # Persist all successful resolutions
+    # Process locations in parallel with async and incremental saves
+    async def resolve_all_incremental(progress_task):
         success_count = 0
         fail_count = 0
 
-        for resolution in results:
-            if resolution:
-                resolver.persist_resolution(resolution)
-                success_count += 1
-            else:
-                fail_count += 1
+        # Create semaphore for concurrency control
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def resolve_and_save(loc):
+            nonlocal success_count, fail_count
+            async with semaphore:
+                try:
+                    # Resolve location
+                    resolution = await resolver.resolve_async(
+                        story_id=loc["story_id"],
+                        loc_idx=loc["loc_idx"],
+                        place_name=loc["place_name"],
+                        place_type=loc["place_type"],
+                        note=loc["note"],
+                        lat=loc["lat"],
+                        lon=loc["lon"],
+                        geo_precision=loc["geo_precision"],
+                        story_title=loc["story_title"],
+                        story_summary=loc["story_summary"],
+                    )
+
+                    # Save immediately if successful
+                    if resolution:
+                        resolver.persist_resolution(resolution)
+                        success_count += 1
+                    else:
+                        fail_count += 1
+
+                    # Update progress
+                    progress_bar.update(progress_task, advance=1)
+
+                except Exception as e:
+                    if verbose:
+                        console.print(f"[red]Error resolving {loc['place_name']}: {str(e)[:100]}[/red]")
+                    fail_count += 1
+                    progress_bar.update(progress_task, advance=1)
+
+        # Process all locations (return_exceptions=True ensures partial failures don't crash entire batch)
+        await asyncio.gather(*[resolve_and_save(loc) for loc in filtered_locations], return_exceptions=True)
 
         return success_count, fail_count
 
@@ -234,13 +263,11 @@ def resolve(
         TextColumn("•"),
         TimeElapsedColumn(),
         console=console,
-    ) as progress:
-        task = progress.add_task(f"Resolving {len(filtered_locations)} locations...", total=len(filtered_locations))
+    ) as progress_bar:
+        task = progress_bar.add_task(f"Resolving {len(filtered_locations)} locations...", total=len(filtered_locations))
 
-        # Run async batch (progress will update as tasks complete)
-        success_count, fail_count = asyncio.run(resolve_all())
-
-        progress.update(task, completed=len(filtered_locations))
+        # Run async resolution with incremental saves
+        success_count, fail_count = asyncio.run(resolve_all_incremental(task))
 
     console.print(f"\n[green]✓ Successfully resolved {success_count} locations[/green]")
     if fail_count > 0:

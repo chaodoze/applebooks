@@ -284,15 +284,13 @@ abxgeo clear-cache --db library.sqlite --older-than 7d
 - ✅ Dependencies: geopy, requests
 
 **M2-M5 Complete (2025-10-03)**:
-- ✅ M2: BAML functions (query generation, candidate extraction, scoring)
-  - `GenerateSearchQuery`: Creates optimized web search queries
-  - `ExtractAddressCandidates`: Parses search results for addresses
-  - `ScoreAndValidate`: Cross-validates and scores candidates
-  - GeocodeModel client using GPT-5 with medium reasoning effort
-- ✅ M3: Web harvester (DuckDuckGo search + URL fetch + cache)
-  - Simple web scraping for search results (no API key needed)
-  - URL content fetching with 7-day cache
-  - Graceful fallback when search fails
+- ✅ M2: BAML function with OpenAI web search
+  - `FindPreciseAddress`: Single-step address resolution using GPT-5 with web_search_preview tool
+  - GeocodeModel client using openai-responses provider with medium reasoning effort
+  - Automatic web search, extraction, and validation in one step
+- ✅ M3: Removed - OpenAI web search replaces DuckDuckGo scraping
+  - No longer need separate web harvester
+  - OpenAI's web_search_preview tool handles all web search automatically
 - ✅ M4: Geocoder cascade (Google → Nominatim fallback)
   - Primary: Google Maps (10k free calls/month, superior accuracy)
   - Fallback: Nominatim (free, OpenStreetMap-based)
@@ -300,7 +298,7 @@ abxgeo clear-cache --db library.sqlite --older-than 7d
   - Precision detection: address/street/city/region/country
   - Reverse geocoding support
 - ✅ M5: Resolver orchestration + persistence
-  - End-to-end pipeline: BAML → web search → geocoding
+  - Simplified 3-step pipeline: BAML web search → geocoding → persistence
   - Idempotent resolution with hash-based tracking
   - Incremental mode: re-resolve low-confidence locations
   - Batch processing with progress tracking
@@ -323,6 +321,24 @@ abxgeo clear-cache --db library.sqlite --older-than 7d
   - Parallel (10 workers): ~48 minutes
   - Parallel (20 workers): ~24 minutes
 
+**M7: Robustness & Error Recovery (2025-10-03)**:
+- ✅ **Incremental saves** - Results persisted immediately (no batch waiting)
+  - Each location saved as soon as resolved
+  - Progress preserved even if process interrupted
+  - No data loss on partial batch failures
+- ✅ **Exponential backoff retry logic**
+  - 3 attempts for BAML/OpenAI calls (1s, 2s, 4s delays)
+  - 2 attempts for geocoding calls (1s, 2s delays)
+  - Smart detection of retryable errors (broken pipe, connection, timeout, rate limit)
+- ✅ **Graceful error handling**
+  - Individual failures don't crash entire batch (`return_exceptions=True`)
+  - Detailed error logging in verbose mode
+  - Success/fail counters track completion stats
+- ✅ **Resume capability**
+  - Query filters `WHERE resolved_address IS NULL`
+  - Can re-run same command to resume from interruption
+  - Incremental mode respects high-confidence results
+
 ### Ground Truth Fixtures
 1. **Fountain Factory**: "Apple factory in Fountain, Colorado" → 702 Bandley Dr, Fountain, CO 80817
 2. **Crist Dr Residence**: "Patty Jobs residence, Los Altos" → 2066 Crist Dr, Los Altos, CA 94024 (residence flag)
@@ -339,7 +355,6 @@ applebooks/
 │   ├── db_migrate.py      # Schema v1.0 → v1.1 migration
 │   ├── resolver.py        # Core pipeline (sync + async methods)
 │   ├── rate_limiter.py    # Per-service rate limiting
-│   ├── web_harvester.py   # DuckDuckGo search + URL caching
 │   └── geocoder.py        # Google/Nominatim cascade
 ├── baml_src/
 │   ├── main.baml          # Story extraction (ABX)

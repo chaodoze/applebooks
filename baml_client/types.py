@@ -41,10 +41,10 @@ def all_succeeded(checks: typing.Dict[CheckName, Check]) -> bool:
 # #########################################################################
 
 # #########################################################################
-# Generated classes (12)
+# Generated classes (10)
 # #########################################################################
 
-class AddressCandidate(BaseModel):
+class AddressResolution(BaseModel):
     address: str
     lat: typing.Optional[float] = None
     lon: typing.Optional[float] = None
@@ -53,6 +53,8 @@ class AddressCandidate(BaseModel):
     source_snippet: str
     confidence: float
     is_residence: bool
+    corroboration: typing.List[str]
+    concerns: typing.List[str]
     reasoning: str
 
 class Company(BaseModel):
@@ -105,17 +107,6 @@ class Relationships(BaseModel):
     contradicts: typing.Optional[typing.List[str]] = None
     references: typing.Optional[typing.List[str]] = None
     precedes: typing.Optional[typing.List[str]] = None
-
-class ScoredCandidate(BaseModel):
-    candidate: "AddressCandidate"
-    final_score: float
-    corroboration: typing.List[str]
-    concerns: typing.List[str]
-
-class SearchQuery(BaseModel):
-    query: str
-    intent: str
-    constraints: typing.List[str]
 
 class Story(BaseModel):
     story_id: str

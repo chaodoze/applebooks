@@ -79,21 +79,6 @@ class BamlAsyncClient:
     def parse_stream(self):
       return self.__llm_stream_parser
     
-    async def ExtractAddressCandidates(self, search_results: str,place_name: str,story_context: str,
-        baml_options: BamlCallOptions = {},
-    ) -> typing.List["types.AddressCandidate"]:
-        # Check if on_tick is provided
-        if 'on_tick' in baml_options:
-            # Use streaming internally when on_tick is provided
-            stream = self.stream.ExtractAddressCandidates(search_results=search_results,place_name=place_name,story_context=story_context,
-                baml_options=baml_options)
-            return await stream.get_final_response()
-        else:
-            # Original non-streaming code
-            result = await self.__options.merge_options(baml_options).call_function_async(function_name="ExtractAddressCandidates", args={
-                "search_results": search_results,"place_name": place_name,"story_context": story_context,
-            })
-            return typing.cast(typing.List["types.AddressCandidate"], result.cast_to(types, types, stream_types, False, __runtime__))
     async def ExtractStories(self, chapter_text: str,book_context: str,
         baml_options: BamlCallOptions = {},
     ) -> typing.List["types.Story"]:
@@ -109,36 +94,21 @@ class BamlAsyncClient:
                 "chapter_text": chapter_text,"book_context": book_context,
             })
             return typing.cast(typing.List["types.Story"], result.cast_to(types, types, stream_types, False, __runtime__))
-    async def GenerateSearchQuery(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,
+    async def FindPreciseAddress(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,original_lat: typing.Optional[float] = None,original_lon: typing.Optional[float] = None,
         baml_options: BamlCallOptions = {},
-    ) -> types.SearchQuery:
+    ) -> types.AddressResolution:
         # Check if on_tick is provided
         if 'on_tick' in baml_options:
             # Use streaming internally when on_tick is provided
-            stream = self.stream.GenerateSearchQuery(place_name=place_name,place_type=place_type,note=note,story_title=story_title,story_summary=story_summary,
+            stream = self.stream.FindPreciseAddress(place_name=place_name,place_type=place_type,note=note,story_title=story_title,story_summary=story_summary,original_lat=original_lat,original_lon=original_lon,
                 baml_options=baml_options)
             return await stream.get_final_response()
         else:
             # Original non-streaming code
-            result = await self.__options.merge_options(baml_options).call_function_async(function_name="GenerateSearchQuery", args={
-                "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,
+            result = await self.__options.merge_options(baml_options).call_function_async(function_name="FindPreciseAddress", args={
+                "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,"original_lat": original_lat,"original_lon": original_lon,
             })
-            return typing.cast(types.SearchQuery, result.cast_to(types, types, stream_types, False, __runtime__))
-    async def ScoreAndValidate(self, candidates: typing.List["types.AddressCandidate"],place_name: str,original_coords: typing.Optional[str] = None,
-        baml_options: BamlCallOptions = {},
-    ) -> types.ScoredCandidate:
-        # Check if on_tick is provided
-        if 'on_tick' in baml_options:
-            # Use streaming internally when on_tick is provided
-            stream = self.stream.ScoreAndValidate(candidates=candidates,place_name=place_name,original_coords=original_coords,
-                baml_options=baml_options)
-            return await stream.get_final_response()
-        else:
-            # Original non-streaming code
-            result = await self.__options.merge_options(baml_options).call_function_async(function_name="ScoreAndValidate", args={
-                "candidates": candidates,"place_name": place_name,"original_coords": original_coords,
-            })
-            return typing.cast(types.ScoredCandidate, result.cast_to(types, types, stream_types, False, __runtime__))
+            return typing.cast(types.AddressResolution, result.cast_to(types, types, stream_types, False, __runtime__))
     
 
 
@@ -148,18 +118,6 @@ class BamlStreamClient:
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
 
-    def ExtractAddressCandidates(self, search_results: str,place_name: str,story_context: str,
-        baml_options: BamlCallOptions = {},
-    ) -> baml_py.BamlStream[typing.List["stream_types.AddressCandidate"], typing.List["types.AddressCandidate"]]:
-        ctx, result = self.__options.merge_options(baml_options).create_async_stream(function_name="ExtractAddressCandidates", args={
-            "search_results": search_results,"place_name": place_name,"story_context": story_context,
-        })
-        return baml_py.BamlStream[typing.List["stream_types.AddressCandidate"], typing.List["types.AddressCandidate"]](
-          result,
-          lambda x: typing.cast(typing.List["stream_types.AddressCandidate"], x.cast_to(types, types, stream_types, True, __runtime__)),
-          lambda x: typing.cast(typing.List["types.AddressCandidate"], x.cast_to(types, types, stream_types, False, __runtime__)),
-          ctx,
-        )
     def ExtractStories(self, chapter_text: str,book_context: str,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.BamlStream[typing.List["stream_types.Story"], typing.List["types.Story"]]:
@@ -172,28 +130,16 @@ class BamlStreamClient:
           lambda x: typing.cast(typing.List["types.Story"], x.cast_to(types, types, stream_types, False, __runtime__)),
           ctx,
         )
-    def GenerateSearchQuery(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,
+    def FindPreciseAddress(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,original_lat: typing.Optional[float] = None,original_lon: typing.Optional[float] = None,
         baml_options: BamlCallOptions = {},
-    ) -> baml_py.BamlStream[stream_types.SearchQuery, types.SearchQuery]:
-        ctx, result = self.__options.merge_options(baml_options).create_async_stream(function_name="GenerateSearchQuery", args={
-            "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,
+    ) -> baml_py.BamlStream[stream_types.AddressResolution, types.AddressResolution]:
+        ctx, result = self.__options.merge_options(baml_options).create_async_stream(function_name="FindPreciseAddress", args={
+            "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,"original_lat": original_lat,"original_lon": original_lon,
         })
-        return baml_py.BamlStream[stream_types.SearchQuery, types.SearchQuery](
+        return baml_py.BamlStream[stream_types.AddressResolution, types.AddressResolution](
           result,
-          lambda x: typing.cast(stream_types.SearchQuery, x.cast_to(types, types, stream_types, True, __runtime__)),
-          lambda x: typing.cast(types.SearchQuery, x.cast_to(types, types, stream_types, False, __runtime__)),
-          ctx,
-        )
-    def ScoreAndValidate(self, candidates: typing.List["types.AddressCandidate"],place_name: str,original_coords: typing.Optional[str] = None,
-        baml_options: BamlCallOptions = {},
-    ) -> baml_py.BamlStream[stream_types.ScoredCandidate, types.ScoredCandidate]:
-        ctx, result = self.__options.merge_options(baml_options).create_async_stream(function_name="ScoreAndValidate", args={
-            "candidates": candidates,"place_name": place_name,"original_coords": original_coords,
-        })
-        return baml_py.BamlStream[stream_types.ScoredCandidate, types.ScoredCandidate](
-          result,
-          lambda x: typing.cast(stream_types.ScoredCandidate, x.cast_to(types, types, stream_types, True, __runtime__)),
-          lambda x: typing.cast(types.ScoredCandidate, x.cast_to(types, types, stream_types, False, __runtime__)),
+          lambda x: typing.cast(stream_types.AddressResolution, x.cast_to(types, types, stream_types, True, __runtime__)),
+          lambda x: typing.cast(types.AddressResolution, x.cast_to(types, types, stream_types, False, __runtime__)),
           ctx,
         )
     
@@ -204,13 +150,6 @@ class BamlHttpRequestClient:
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
 
-    async def ExtractAddressCandidates(self, search_results: str,place_name: str,story_context: str,
-        baml_options: BamlCallOptions = {},
-    ) -> baml_py.baml_py.HTTPRequest:
-        result = await self.__options.merge_options(baml_options).create_http_request_async(function_name="ExtractAddressCandidates", args={
-            "search_results": search_results,"place_name": place_name,"story_context": story_context,
-        }, mode="request")
-        return result
     async def ExtractStories(self, chapter_text: str,book_context: str,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.baml_py.HTTPRequest:
@@ -218,18 +157,11 @@ class BamlHttpRequestClient:
             "chapter_text": chapter_text,"book_context": book_context,
         }, mode="request")
         return result
-    async def GenerateSearchQuery(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,
+    async def FindPreciseAddress(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,original_lat: typing.Optional[float] = None,original_lon: typing.Optional[float] = None,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.baml_py.HTTPRequest:
-        result = await self.__options.merge_options(baml_options).create_http_request_async(function_name="GenerateSearchQuery", args={
-            "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,
-        }, mode="request")
-        return result
-    async def ScoreAndValidate(self, candidates: typing.List["types.AddressCandidate"],place_name: str,original_coords: typing.Optional[str] = None,
-        baml_options: BamlCallOptions = {},
-    ) -> baml_py.baml_py.HTTPRequest:
-        result = await self.__options.merge_options(baml_options).create_http_request_async(function_name="ScoreAndValidate", args={
-            "candidates": candidates,"place_name": place_name,"original_coords": original_coords,
+        result = await self.__options.merge_options(baml_options).create_http_request_async(function_name="FindPreciseAddress", args={
+            "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,"original_lat": original_lat,"original_lon": original_lon,
         }, mode="request")
         return result
     
@@ -240,13 +172,6 @@ class BamlHttpStreamRequestClient:
     def __init__(self, options: DoNotUseDirectlyCallManager):
         self.__options = options
 
-    async def ExtractAddressCandidates(self, search_results: str,place_name: str,story_context: str,
-        baml_options: BamlCallOptions = {},
-    ) -> baml_py.baml_py.HTTPRequest:
-        result = await self.__options.merge_options(baml_options).create_http_request_async(function_name="ExtractAddressCandidates", args={
-            "search_results": search_results,"place_name": place_name,"story_context": story_context,
-        }, mode="stream")
-        return result
     async def ExtractStories(self, chapter_text: str,book_context: str,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.baml_py.HTTPRequest:
@@ -254,18 +179,11 @@ class BamlHttpStreamRequestClient:
             "chapter_text": chapter_text,"book_context": book_context,
         }, mode="stream")
         return result
-    async def GenerateSearchQuery(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,
+    async def FindPreciseAddress(self, place_name: str,place_type: typing.Optional[str],note: typing.Optional[str],story_title: str,story_summary: str,original_lat: typing.Optional[float] = None,original_lon: typing.Optional[float] = None,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.baml_py.HTTPRequest:
-        result = await self.__options.merge_options(baml_options).create_http_request_async(function_name="GenerateSearchQuery", args={
-            "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,
-        }, mode="stream")
-        return result
-    async def ScoreAndValidate(self, candidates: typing.List["types.AddressCandidate"],place_name: str,original_coords: typing.Optional[str] = None,
-        baml_options: BamlCallOptions = {},
-    ) -> baml_py.baml_py.HTTPRequest:
-        result = await self.__options.merge_options(baml_options).create_http_request_async(function_name="ScoreAndValidate", args={
-            "candidates": candidates,"place_name": place_name,"original_coords": original_coords,
+        result = await self.__options.merge_options(baml_options).create_http_request_async(function_name="FindPreciseAddress", args={
+            "place_name": place_name,"place_type": place_type,"note": note,"story_title": story_title,"story_summary": story_summary,"original_lat": original_lat,"original_lon": original_lon,
         }, mode="stream")
         return result
     

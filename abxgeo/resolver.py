@@ -19,7 +19,6 @@ sys.path.insert(0, str(project_root))
 
 from abxgeo.geocoder import GeocoderCascade
 from abxgeo.rate_limiter import GOOGLE_MAPS_LIMITER, NOMINATIM_LIMITER, OPENAI_LIMITER
-from abxgeo.web_harvester import WebHarvester
 from baml_client import b
 
 
@@ -52,8 +51,7 @@ class LocationResolver:
 
             google_api_key = os.environ.get("GOOGLE_MAPS_API_KEY")
 
-        # Initialize components
-        self.harvester = WebHarvester(db_path)
+        # Initialize geocoder
         self.geocoder = GeocoderCascade(
             user_agent=f"ABXGeo/1.0 ({user_email})",
             google_api_key=google_api_key,
@@ -99,92 +97,36 @@ class LocationResolver:
             print(f"\n=== Resolving: {place_name} ===")
             print(f"Type: {place_type}, Note: {note}")
 
-        # Step 1: Generate search query using BAML
+        # Step 1: Find precise address using BAML with web search
         try:
-            search_query_obj = asyncio.run(
-                b.GenerateSearchQuery(
+            address_resolution = asyncio.run(
+                b.FindPreciseAddress(
                     place_name=place_name,
                     place_type=place_type,
                     note=note,
                     story_title=story_title,
                     story_summary=story_summary,
-                )
-            )
-            search_query = search_query_obj.query
-
-            if self.verbose:
-                print(f"Search query: {search_query}")
-
-        except Exception as e:
-            print(f"Failed to generate search query: {e}")
-            return None
-
-        # Step 2: Search web and fetch content
-        try:
-            search_results = self.harvester.harvest(search_query, max_results=5)
-
-            if self.verbose:
-                print(f"Search results length: {len(search_results)} chars")
-
-        except Exception as e:
-            print(f"Failed to harvest web content: {e}")
-            return None
-
-        # Step 3: Extract address candidates using BAML
-        try:
-            story_context = f"{story_title}: {story_summary}"
-            candidates = asyncio.run(
-                b.ExtractAddressCandidates(
-                    search_results=search_results,
-                    place_name=place_name,
-                    story_context=story_context,
+                    original_lat=lat,
+                    original_lon=lon,
                 )
             )
 
             if self.verbose:
-                print(f"Found {len(candidates)} candidates")
-                for i, cand in enumerate(candidates, 1):
-                    print(f"  {i}. {cand.address} (confidence: {cand.confidence})")
+                print(f"Found address: {address_resolution.address}")
+                print(f"Confidence: {address_resolution.confidence}")
+                print(f"Precision: {address_resolution.precision}")
+                print(f"Corroboration: {address_resolution.corroboration}")
+                print(f"Concerns: {address_resolution.concerns}")
 
         except Exception as e:
-            print(f"Failed to extract candidates: {e}")
+            print(f"Failed to find address: {e}")
             return None
 
-        # If no candidates, return early
-        if not candidates:
-            if self.verbose:
-                print("No candidates found")
-            return None
-
-        # Step 4: Score and validate using BAML
-        try:
-            original_coords = f"{lat},{lon}" if lat and lon else None
-            scored = asyncio.run(
-                b.ScoreAndValidate(
-                    candidates=candidates,
-                    place_name=place_name,
-                    original_coords=original_coords,
-                )
-            )
-
-            best_candidate = scored.candidate
-            final_score = scored.final_score
-
-            if self.verbose:
-                print(f"Best candidate: {best_candidate.address}")
-                print(f"Final score: {final_score}")
-                print(f"Corroboration: {scored.corroboration}")
-                print(f"Concerns: {scored.concerns}")
-
-        except Exception as e:
-            print(f"Failed to score candidates: {e}")
-            return None
-
-        # Step 5: Geocode the best candidate address
+        # Step 2: Geocode the address for precise coordinates
         geocode_result = None
-        if best_candidate.address:
+        if address_resolution.address:
             try:
-                geocode_result = self.geocoder.geocode(best_candidate.address)
+                geocode_result = self.geocoder.geocode(address_resolution.address)
 
                 if geocode_result and self.verbose:
                     print(f"Geocoded: {geocode_result['address']}")
@@ -194,23 +136,23 @@ class LocationResolver:
             except Exception as e:
                 print(f"Failed to geocode: {e}")
 
-        # Step 6: Build resolution result
+        # Step 3: Build resolution result
         result = {
             "story_id": story_id,
             "loc_idx": loc_idx,
-            "resolved_address": best_candidate.address,
-            "resolved_lat": geocode_result["lat"] if geocode_result else best_candidate.lat,
-            "resolved_lon": geocode_result["lon"] if geocode_result else best_candidate.lon,
-            "resolved_precision": geocode_result["precision"] if geocode_result else best_candidate.precision,
-            "resolution_confidence": final_score,
+            "resolved_address": address_resolution.address,
+            "resolved_lat": geocode_result["lat"] if geocode_result else address_resolution.lat,
+            "resolved_lon": geocode_result["lon"] if geocode_result else address_resolution.lon,
+            "resolved_precision": geocode_result["precision"] if geocode_result else address_resolution.precision,
+            "resolution_confidence": address_resolution.confidence,
             "resolution_source": json.dumps(
                 {
-                    "url": best_candidate.source_url,
-                    "snippet": best_candidate.source_snippet,
+                    "url": address_resolution.source_url,
+                    "snippet": address_resolution.source_snippet,
                     "geocoder": geocode_result["source"] if geocode_result else None,
-                    "is_residence": best_candidate.is_residence,
-                    "corroboration": scored.corroboration,
-                    "concerns": scored.concerns,
+                    "is_residence": address_resolution.is_residence,
+                    "corroboration": address_resolution.corroboration,
+                    "concerns": address_resolution.concerns,
                 }
             ),
             "resolved_at": datetime.now().isoformat(),
@@ -317,123 +259,102 @@ class LocationResolver:
             print(f"\n=== Resolving: {place_name} ===")
             print(f"Type: {place_type}, Note: {note}")
 
-        # Step 1: Generate search query using BAML (with rate limiting)
-        try:
-            async with OPENAI_LIMITER:
-                search_query_obj = await b.GenerateSearchQuery(
-                    place_name=place_name,
-                    place_type=place_type,
-                    note=note,
-                    story_title=story_title,
-                    story_summary=story_summary,
-                )
-                search_query = search_query_obj.query
+        # Step 1: Find precise address using BAML with web search (with rate limiting and retry)
+        max_retries = 3
+        retry_delay = 1  # Start with 1 second
 
-            if self.verbose:
-                print(f"Search query: {search_query}")
-
-        except Exception as e:
-            print(f"Failed to generate search query: {e}")
-            return None
-
-        # Step 2: Search web and fetch content (run in thread pool)
-        try:
-            search_results = await asyncio.to_thread(self.harvester.harvest, search_query, 5)
-
-            if self.verbose:
-                print(f"Search results length: {len(search_results)} chars")
-
-        except Exception as e:
-            print(f"Failed to harvest web content: {e}")
-            return None
-
-        # Step 3: Extract address candidates using BAML (with rate limiting)
-        try:
-            story_context = f"{story_title}: {story_summary}"
-
-            async with OPENAI_LIMITER:
-                candidates = await b.ExtractAddressCandidates(
-                    search_results=search_results,
-                    place_name=place_name,
-                    story_context=story_context,
-                )
-
-            if self.verbose:
-                print(f"Found {len(candidates)} candidates")
-                for i, cand in enumerate(candidates, 1):
-                    print(f"  {i}. {cand.address} (confidence: {cand.confidence})")
-
-        except Exception as e:
-            print(f"Failed to extract candidates: {e}")
-            return None
-
-        # If no candidates, return early
-        if not candidates:
-            if self.verbose:
-                print("No candidates found")
-            return None
-
-        # Step 4: Score and validate using BAML (with rate limiting)
-        try:
-            original_coords = f"{lat},{lon}" if lat and lon else None
-
-            async with OPENAI_LIMITER:
-                scored = await b.ScoreAndValidate(
-                    candidates=candidates,
-                    place_name=place_name,
-                    original_coords=original_coords,
-                )
-
-            best_candidate = scored.candidate
-            final_score = scored.final_score
-
-            if self.verbose:
-                print(f"Best candidate: {best_candidate.address}")
-                print(f"Final score: {final_score}")
-                print(f"Corroboration: {scored.corroboration}")
-                print(f"Concerns: {scored.concerns}")
-
-        except Exception as e:
-            print(f"Failed to score candidates: {e}")
-            return None
-
-        # Step 5: Geocode the best candidate address (run in thread pool with rate limiting)
-        geocode_result = None
-        if best_candidate.address:
+        for attempt in range(max_retries):
             try:
-                # Use appropriate rate limiter based on geocoder
-                if self.geocoder.google:
-                    async with GOOGLE_MAPS_LIMITER:
-                        geocode_result = await asyncio.to_thread(self.geocoder.geocode, best_candidate.address)
-                else:
-                    async with NOMINATIM_LIMITER:
-                        geocode_result = await asyncio.to_thread(self.geocoder.geocode, best_candidate.address)
+                async with OPENAI_LIMITER:
+                    address_resolution = await b.FindPreciseAddress(
+                        place_name=place_name,
+                        place_type=place_type,
+                        note=note,
+                        story_title=story_title,
+                        story_summary=story_summary,
+                        original_lat=lat,
+                        original_lon=lon,
+                    )
 
-                if geocode_result and self.verbose:
-                    print(f"Geocoded: {geocode_result['address']}")
-                    print(f"Coords: ({geocode_result['lat']}, {geocode_result['lon']})")
-                    print(f"Precision: {geocode_result['precision']}")
+                if self.verbose:
+                    print(f"Found address: {address_resolution.address}")
+                    print(f"Confidence: {address_resolution.confidence}")
+                    print(f"Precision: {address_resolution.precision}")
+                    print(f"Corroboration: {address_resolution.corroboration}")
+                    print(f"Concerns: {address_resolution.concerns}")
+
+                # Success - break out of retry loop
+                break
 
             except Exception as e:
-                print(f"Failed to geocode: {e}")
+                error_msg = str(e)
+                is_retryable = (
+                    "broken pipe" in error_msg.lower()
+                    or "connection" in error_msg.lower()
+                    or "timeout" in error_msg.lower()
+                    or "rate limit" in error_msg.lower()
+                )
 
-        # Step 6: Build resolution result
+                if attempt < max_retries - 1 and is_retryable:
+                    print(f"⚠ Attempt {attempt + 1} failed: {error_msg[:100]}")
+                    print(f"  Retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    print(f"Failed to find address after {attempt + 1} attempts: {error_msg[:200]}")
+                    return None
+
+        # Step 2: Geocode the address for precise coordinates (run in thread pool with rate limiting and retry)
+        geocode_result = None
+        if address_resolution.address:
+            max_geocode_retries = 2
+            geocode_delay = 1
+
+            for attempt in range(max_geocode_retries):
+                try:
+                    # Use appropriate rate limiter based on geocoder
+                    if self.geocoder.google:
+                        async with GOOGLE_MAPS_LIMITER:
+                            geocode_result = await asyncio.to_thread(self.geocoder.geocode, address_resolution.address)
+                    else:
+                        async with NOMINATIM_LIMITER:
+                            geocode_result = await asyncio.to_thread(self.geocoder.geocode, address_resolution.address)
+
+                    if geocode_result and self.verbose:
+                        print(f"Geocoded: {geocode_result['address']}")
+                        print(f"Coords: ({geocode_result['lat']}, {geocode_result['lon']})")
+                        print(f"Precision: {geocode_result['precision']}")
+
+                    # Success - break out of retry loop
+                    break
+
+                except Exception as e:
+                    error_msg = str(e)
+                    if attempt < max_geocode_retries - 1:
+                        print(f"⚠ Geocoding attempt {attempt + 1} failed: {error_msg[:100]}")
+                        print(f"  Retrying in {geocode_delay}s...")
+                        await asyncio.sleep(geocode_delay)
+                        geocode_delay *= 2
+                    else:
+                        print(f"Failed to geocode after {attempt + 1} attempts: {error_msg[:200]}")
+
+        # Step 3: Build resolution result
         result = {
             "story_id": story_id,
             "loc_idx": loc_idx,
-            "resolved_address": best_candidate.address,
-            "resolved_lat": geocode_result["lat"] if geocode_result else best_candidate.lat,
-            "resolved_lon": geocode_result["lon"] if geocode_result else best_candidate.lon,
-            "resolved_precision": geocode_result["precision"] if geocode_result else best_candidate.precision,
-            "resolution_confidence": final_score,
+            "resolved_address": address_resolution.address,
+            "resolved_lat": geocode_result["lat"] if geocode_result else address_resolution.lat,
+            "resolved_lon": geocode_result["lon"] if geocode_result else address_resolution.lon,
+            "resolved_precision": geocode_result["precision"] if geocode_result else address_resolution.precision,
+            "resolution_confidence": address_resolution.confidence,
             "resolution_source": json.dumps(
                 {
-                    "url": best_candidate.source_url,
-                    "snippet": best_candidate.source_snippet,
+                    "url": address_resolution.source_url,
+                    "snippet": address_resolution.source_snippet,
                     "geocoder": geocode_result["source"] if geocode_result else None,
-                    "is_residence": best_candidate.is_residence,
-                    "corroboration": scored.corroboration,
-                    "concerns": scored.concerns,
+                    "is_residence": address_resolution.is_residence,
+                    "corroboration": address_resolution.corroboration,
+                    "concerns": address_resolution.concerns,
                 }
             ),
             "resolved_at": datetime.now().isoformat(),
