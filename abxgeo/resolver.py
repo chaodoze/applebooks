@@ -33,12 +33,18 @@ class LocationResolver:
         Args:
             db_path: Path to SQLite database
             user_email: Email for Nominatim user agent
-            google_api_key: Optional Google Maps API key
+            google_api_key: Optional Google Maps API key (also reads from GOOGLE_MAPS_API_KEY env var)
             verbose: Print detailed logs
         """
         self.db_path = db_path
         self.user_email = user_email
         self.verbose = verbose
+
+        # Get Google API key from env if not provided
+        if google_api_key is None:
+            import os
+
+            google_api_key = os.environ.get("GOOGLE_MAPS_API_KEY")
 
         # Initialize components
         self.harvester = WebHarvester(db_path)
@@ -46,6 +52,11 @@ class LocationResolver:
             user_agent=f"ABXGeo/1.0 ({user_email})",
             google_api_key=google_api_key,
         )
+
+        if self.verbose and google_api_key:
+            print(f"✓ Google Maps API key configured (cascade: Google → Nominatim)")
+        elif self.verbose:
+            print(f"⚠ No Google Maps API key (using Nominatim only)")
 
     def resolve(
         self,

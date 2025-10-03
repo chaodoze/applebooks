@@ -243,6 +243,9 @@ Separate CLI (`abxgeo`) for enhancing vague locations from ABX with precise addr
 
 ### CLI Commands
 ```bash
+# Setup (optional): Add Google Maps API key for best accuracy
+export GOOGLE_MAPS_API_KEY="your-api-key-here"  # 10k free calls/month
+
 # Migrate existing database
 abxgeo migrate --db library.sqlite
 
@@ -282,9 +285,10 @@ abxgeo clear-cache --db library.sqlite --older-than 7d
   - Simple web scraping for search results (no API key needed)
   - URL content fetching with 7-day cache
   - Graceful fallback when search fails
-- ✅ M4: Geocoder cascade (Nominatim → Google fallback)
-  - Primary: Nominatim (free, OpenStreetMap-based)
-  - Fallback: Google Maps (requires API key, optional)
+- ✅ M4: Geocoder cascade (Google → Nominatim fallback)
+  - Primary: Google Maps (10k free calls/month, superior accuracy)
+  - Fallback: Nominatim (free, OpenStreetMap-based)
+  - Auto-detects GOOGLE_MAPS_API_KEY environment variable
   - Precision detection: address/street/city/region/country
   - Reverse geocoding support
 - ✅ M5: Resolver orchestration + persistence

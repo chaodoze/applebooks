@@ -157,12 +157,10 @@ def resolve(
     # Import resolver
     from abxgeo.resolver import LocationResolver
 
-    # Initialize resolver
-    google_api_key = None  # TODO: Support Google API key from env/config
+    # Initialize resolver (reads GOOGLE_MAPS_API_KEY from env)
     resolver = LocationResolver(
         db_path=str(db),
         user_email=email,
-        google_api_key=google_api_key,
         verbose=verbose,
     )
 

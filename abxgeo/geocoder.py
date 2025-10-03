@@ -36,9 +36,9 @@ class GeocoderCascade:
         Geocode an address using cascade of services.
 
         Tries in order:
-        1. Nominatim (free, OpenStreetMap)
-        2. Google Maps (if API key provided)
-        3. Mapbox (if API key provided)
+        1. Google Maps (if API key provided) - 10k free calls/month, superior accuracy
+        2. Nominatim (free, OpenStreetMap) - fallback, respects rate limits
+        3. Mapbox (if API key provided) - additional fallback
 
         Args:
             address: Address to geocode
@@ -53,16 +53,16 @@ class GeocoderCascade:
                 - source: Which geocoder was used
             Or None if geocoding failed
         """
-        # Try Nominatim first (free)
-        result = self._try_nominatim(address, timeout)
-        if result:
-            return result
-
-        # Try Google if available
+        # Try Google first (10k free calls/month, best accuracy)
         if self.google:
             result = self._try_google(address, timeout)
             if result:
                 return result
+
+        # Fallback to Nominatim (free, but less accurate)
+        result = self._try_nominatim(address, timeout)
+        if result:
+            return result
 
         # Could add Mapbox here if needed
         # if self.mapbox_api_key:
@@ -184,23 +184,7 @@ class GeocoderCascade:
         Returns:
             Dictionary with address and precision, or None if failed
         """
-        # Try Nominatim first
-        try:
-            location: Location | None = self.nominatim.reverse((lat, lon), timeout=timeout, addressdetails=True)
-
-            if location:
-                precision = self._determine_precision_nominatim(location)
-                return {
-                    "address": location.address,
-                    "lat": location.latitude,
-                    "lon": location.longitude,
-                    "precision": precision,
-                    "source": "nominatim",
-                }
-        except Exception as e:
-            print(f"Nominatim reverse geocoding failed for ({lat}, {lon}): {e}")
-
-        # Try Google if available
+        # Try Google first (10k free calls/month, best accuracy)
         if self.google:
             try:
                 location: Location | None = self.google.reverse((lat, lon), timeout=timeout)
@@ -216,5 +200,21 @@ class GeocoderCascade:
                     }
             except Exception as e:
                 print(f"Google reverse geocoding failed for ({lat}, {lon}): {e}")
+
+        # Fallback to Nominatim
+        try:
+            location: Location | None = self.nominatim.reverse((lat, lon), timeout=timeout, addressdetails=True)
+
+            if location:
+                precision = self._determine_precision_nominatim(location)
+                return {
+                    "address": location.address,
+                    "lat": location.latitude,
+                    "lon": location.longitude,
+                    "precision": precision,
+                    "source": "nominatim",
+                }
+        except Exception as e:
+            print(f"Nominatim reverse geocoding failed for ({lat}, {lon}): {e}")
 
         return None
