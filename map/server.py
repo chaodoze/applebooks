@@ -5,8 +5,10 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from sklearn.cluster import DBSCAN
 
 # Database path (relative to this file)
 DB_PATH = Path(__file__).parent.parent / "full_book.sqlite"
@@ -28,6 +30,88 @@ def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def zoom_to_epsilon(zoom: int) -> float:
+    """
+    Map zoom level to DBSCAN epsilon (in radians for haversine metric).
+
+    Zoom levels (Google Maps):
+    1-4: World view (separate continents/countries)
+    5-7: Regional view (states/regions within country)
+    8-10: City view
+    11-13: Neighborhood view
+    14+: Street view (show individual markers)
+
+    Returns epsilon in radians for haversine distance.
+    """
+    # Convert km to radians: radians = km / earth_radius_km
+    EARTH_RADIUS_KM = 6371
+
+    if zoom <= 4:
+        return 500 / EARTH_RADIUS_KM  # ~500km - keep continents separate
+    elif zoom <= 7:
+        return 100 / EARTH_RADIUS_KM  # ~100km - regional clusters
+    elif zoom <= 9:
+        return 20 / EARTH_RADIUS_KM  # ~20km - city clusters
+    elif zoom <= 11:
+        return 5 / EARTH_RADIUS_KM  # ~5km - neighborhood clusters
+    elif zoom <= 13:
+        return 1 / EARTH_RADIUS_KM  # ~1km - block-level clusters
+    else:
+        return 0.0  # No clustering, show individual markers
+
+
+def cluster_locations(locations: list[dict], epsilon_radians: float, min_samples: int = 2) -> list[dict]:
+    """
+    Cluster locations using DBSCAN.
+
+    Args:
+        locations: List of dicts with 'lat', 'lon', 'story_id', etc.
+        epsilon_radians: DBSCAN epsilon in radians (for haversine metric)
+        min_samples: Minimum samples per cluster
+
+    Returns:
+        List of cluster dicts with center_lat, center_lon, stories, etc.
+    """
+    if not locations:
+        return []
+
+    # Extract coordinates
+    coords = np.array([[loc["lat"], loc["lon"]] for loc in locations])
+
+    # Run DBSCAN (using haversine metric with radians)
+    clustering = DBSCAN(eps=epsilon_radians, min_samples=min_samples, metric="haversine").fit(np.radians(coords))
+
+    # Group locations by cluster
+    clusters = {}
+    for idx, label in enumerate(clustering.labels_):
+        if label == -1:  # Noise point - treat as individual location
+            continue
+        if label not in clusters:
+            clusters[label] = []
+        clusters[label].append(locations[idx])
+
+    # Build cluster objects
+    result = []
+    for label, cluster_locs in clusters.items():
+        # Calculate center
+        center_lat = np.mean([loc["lat"] for loc in cluster_locs])
+        center_lon = np.mean([loc["lon"] for loc in cluster_locs])
+
+        # Extract date range
+        dates = [loc.get("date") for loc in cluster_locs if loc.get("date")]
+        date_range = f"{min(dates)}–{max(dates)}" if dates else None
+
+        result.append({
+            "center_lat": float(center_lat),
+            "center_lon": float(center_lon),
+            "story_count": len(cluster_locs),
+            "stories": cluster_locs,
+            "date_range": date_range,
+        })
+
+    return result
 
 
 @app.get("/")
@@ -55,108 +139,81 @@ def get_locations(
     """
     Get locations and clusters for current viewport and zoom level.
 
-    Logic:
-    - If zoom < 8: Return clusters only (global/regional view)
-    - If zoom >= 8: Return individual locations (city/street view)
+    Dynamic clustering approach:
+    - Zoom 1-13: Cluster locations with zoom-appropriate epsilon
+    - Zoom 14+: Return individual location markers
 
-    Both filtered by viewport bounds.
+    All filtered by viewport bounds.
     """
     conn = get_db()
-
     response: dict[str, Any] = {"locations": [], "clusters": []}
 
     print(f"[DEBUG] /api/locations: zoom={zoom}, bounds=({sw_lat}, {sw_lon}) to ({ne_lat}, {ne_lon})")
 
-    if zoom < 8:
-        # Return all clusters (no filtering needed - overlaps handled by merge logic)
-        cursor = conn.execute(
-            """
-            SELECT
-                cluster_id,
-                center_lat,
-                center_lon,
-                summary,
-                key_themes_json,
-                story_count,
-                date_range,
-                zoom_level
-            FROM location_clusters
-            WHERE center_lat BETWEEN ? AND ?
-              AND center_lon BETWEEN ? AND ?
-            ORDER BY story_count DESC
-        """,
-            (sw_lat, ne_lat, sw_lon, ne_lon),
-        )
+    # Fetch all locations in viewport
+    cursor = conn.execute(
+        """
+        SELECT
+            sl.story_id,
+            sl.place_name,
+            sl.resolved_lat,
+            sl.resolved_lon,
+            sl.resolved_address,
+            sl.resolved_precision,
+            sl.resolution_confidence,
+            s.title,
+            s.summary,
+            s.parsed_date
+        FROM story_locations sl
+        JOIN stories s ON sl.story_id = s.story_id
+        WHERE sl.resolved_lat IS NOT NULL
+          AND sl.resolved_lat BETWEEN ? AND ?
+          AND sl.resolved_lon BETWEEN ? AND ?
+        ORDER BY sl.resolution_confidence DESC
+    """,
+        (sw_lat, ne_lat, sw_lon, ne_lon),
+    )
 
-        all_rows = cursor.fetchall()
-        print(f"[DEBUG] SQL returned {len(all_rows)} rows")
+    locations = []
+    for row in cursor.fetchall():
+        # Truncate summary for popup
+        summary_preview = (row["summary"] or "")[:100]
+        if len(row["summary"] or "") > 100:
+            summary_preview += "..."
 
-        clusters = []
-        for row in all_rows:
-            print(f"[DEBUG] Processing cluster {row['cluster_id']}, zoom={row['zoom_level']}, count={row['story_count']}")
-            clusters.append(
-                {
-                    "cluster_id": row["cluster_id"],
-                    "center_lat": row["center_lat"],
-                    "center_lon": row["center_lon"],
-                    "summary": row["summary"],
-                    "key_themes": json.loads(row["key_themes_json"]) if row["key_themes_json"] else [],
-                    "story_count": row["story_count"],
-                    "date_range": row["date_range"],
-                    "zoom_level": row["zoom_level"],
-                }
-            )
+        locations.append({
+            "story_id": row["story_id"],
+            "place_name": row["place_name"],
+            "lat": row["resolved_lat"],
+            "lon": row["resolved_lon"],
+            "address": row["resolved_address"],
+            "precision": row["resolved_precision"],
+            "confidence": row["resolution_confidence"],
+            "title": row["title"],
+            "summary_preview": summary_preview,
+            "date": row["parsed_date"],
+        })
 
-        print(f"[DEBUG] Returning {len(clusters)} clusters")
+    print(f"[DEBUG] Found {len(locations)} locations in viewport")
+
+    # Determine clustering strategy based on zoom
+    epsilon = zoom_to_epsilon(zoom)
+
+    if epsilon > 0:
+        # Cluster the locations
+        clusters = cluster_locations(locations, epsilon, min_samples=2)
+        print(f"[DEBUG] Clustered into {len(clusters)} clusters at zoom {zoom} (epsilon={epsilon})")
+
+        # Add cluster IDs and format response
+        for i, cluster in enumerate(clusters):
+            cluster["cluster_id"] = f"dynamic_{zoom}_{i}"
+            # Simple summary: just location names and count
+            cluster["summary"] = f"{cluster['story_count']} stories"
+
         response["clusters"] = clusters
-
     else:
-        # Return individual locations
-        cursor = conn.execute(
-            """
-            SELECT
-                sl.story_id,
-                sl.place_name,
-                sl.resolved_lat,
-                sl.resolved_lon,
-                sl.resolved_address,
-                sl.resolved_precision,
-                sl.resolution_confidence,
-                s.title,
-                s.summary,
-                s.parsed_date
-            FROM story_locations sl
-            JOIN stories s ON sl.story_id = s.story_id
-            WHERE sl.resolved_lat IS NOT NULL
-              AND sl.resolved_lat BETWEEN ? AND ?
-              AND sl.resolved_lon BETWEEN ? AND ?
-            ORDER BY sl.resolution_confidence DESC
-        """,
-            (sw_lat, ne_lat, sw_lon, ne_lon),
-        )
-
-        locations = []
-        for row in cursor.fetchall():
-            # Truncate summary for mini popup
-            summary_preview = (row["summary"] or "")[:100]
-            if len(row["summary"] or "") > 100:
-                summary_preview += "..."
-
-            locations.append(
-                {
-                    "story_id": row["story_id"],
-                    "place_name": row["place_name"],
-                    "lat": row["resolved_lat"],
-                    "lon": row["resolved_lon"],
-                    "address": row["resolved_address"],
-                    "precision": row["resolved_precision"],
-                    "confidence": row["resolution_confidence"],
-                    "title": row["title"],
-                    "summary_preview": summary_preview,
-                    "date": row["parsed_date"],
-                }
-            )
-
+        # Show individual markers (zoom >= 14)
+        print(f"[DEBUG] Showing {len(locations)} individual markers at zoom {zoom}")
         response["locations"] = locations
 
     conn.close()
@@ -287,85 +344,23 @@ def get_cluster(cluster_id: str) -> dict[str, Any]:
     """
     Get cluster details with all stories.
 
+    For dynamic clusters (cluster_id starts with "dynamic_"), returns the stories
+    that would be in that cluster. This is a lightweight endpoint since we don't
+    have pre-computed summaries.
+
     Returns:
         - cluster_id, center_lat, center_lon
-        - summary, key_themes, date_range, story_count
+        - summary, date_range, story_count
         - stories: list of stories with timeline data
     """
-    conn = get_db()
+    # Dynamic clusters are identified by their ID format: "dynamic_{zoom}_{index}"
+    # For now, we'll return a simple error since the frontend passes the full stories
+    # in the cluster object already. This endpoint is mainly for future expansion.
 
-    # Get cluster metadata
-    cursor = conn.execute(
-        """
-        SELECT
-            cluster_id,
-            center_lat,
-            center_lon,
-            summary,
-            key_themes_json,
-            story_count,
-            date_range,
-            story_ids_json
-        FROM location_clusters
-        WHERE cluster_id = ?
-    """,
-        (cluster_id,),
+    raise HTTPException(
+        status_code=501,
+        detail="Dynamic cluster details not yet implemented. Cluster data is included in /api/locations response."
     )
-
-    cluster_row = cursor.fetchone()
-    if not cluster_row:
-        conn.close()
-        raise HTTPException(status_code=404, detail=f"Cluster {cluster_id} not found")
-
-    cluster = {
-        "cluster_id": cluster_row["cluster_id"],
-        "center_lat": cluster_row["center_lat"],
-        "center_lon": cluster_row["center_lon"],
-        "summary": cluster_row["summary"],
-        "key_themes": json.loads(cluster_row["key_themes_json"]) if cluster_row["key_themes_json"] else [],
-        "story_count": cluster_row["story_count"],
-        "date_range": cluster_row["date_range"],
-    }
-
-    # Get story IDs
-    story_ids = json.loads(cluster_row["story_ids_json"])
-
-    # Fetch stories
-    placeholders = ",".join("?" * len(story_ids))
-    cursor = conn.execute(
-        f"""
-        SELECT
-            s.story_id,
-            s.title,
-            s.summary,
-            s.parsed_date,
-            sl.resolved_lat,
-            sl.resolved_lon
-        FROM stories s
-        LEFT JOIN story_locations sl ON s.story_id = sl.story_id AND sl.loc_idx = 0
-        WHERE s.story_id IN ({placeholders})
-        ORDER BY s.parsed_date
-    """,
-        story_ids,
-    )
-
-    stories = []
-    for row in cursor.fetchall():
-        stories.append(
-            {
-                "story_id": row["story_id"],
-                "title": row["title"],
-                "summary": row["summary"],
-                "date": row["parsed_date"],
-                "lat": row["resolved_lat"],
-                "lon": row["resolved_lon"],
-            }
-        )
-
-    cluster["stories"] = stories
-
-    conn.close()
-    return cluster
 
 
 if __name__ == "__main__":

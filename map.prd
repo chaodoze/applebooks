@@ -1,0 +1,413 @@
+# Story Map Visualization - Product Requirements Document
+
+## Overview
+Interactive web map for visualizing 388 stories from "Apple in China" with 448 geocoded locations spanning 1976-2018, primarily across USA and China.
+
+## Goals
+- **Primary**: Immersive, map-first experience for exploring stories spatially
+- **Secondary**: Handle zoom levels from global (USA/China clusters) to street-level (individual buildings)
+- **Tertiary**: Support future timeline filtering and people/product search (Phase 2)
+
+## Data Summary
+- **388 stories** extracted from EPUB
+- **448 resolved locations** (93.5% resolution success rate)
+  - 265 in China
+  - 149 in USA
+  - 34 in other countries
+- **320 stories** have at least one location
+- **71 locations** clustered at single point (1 Infinite Loop, Cupertino)
+- **Precision levels**:
+  - 157 address-level
+  - 203 city-level
+  - 60 country-level
+- **Date range**: 1976-2018
+- **Key people**: Tim Cook (62 stories), Steve Jobs (57 stories), John Ford (27 stories)
+
+## User Experience
+
+### Map Interaction Flow
+
+#### 1. Global View (Zoom 1-7)
+- Shows 3 heat zones: China, USA, Other
+- Large cluster markers with story counts
+- Hover shows region name + story count
+
+#### 2. City View (Zoom 8-12)
+- Shows city-level clusters (3+ stories within 5km)
+- Cluster markers with story counts
+- Click cluster → Popup with:
+  - LLM-generated summary (2-3 sentences)
+  - Story count
+  - Date range (e.g., "1984-1997")
+  - Key themes (3-5 bullet points)
+  - "View Stories" button
+
+#### 3. Street View (Zoom 13-18)
+- Shows individual story markers (or small clusters within 500m)
+- Click marker → Mini popup with:
+  - Story title
+  - Parsed date
+  - First 50 chars of summary
+  - "View Details" button
+
+#### 4. Story Modal (Click "View Details")
+- Full-screen overlay (dark background)
+- Content:
+  - Story title (large, bold)
+  - Parsed date (if available)
+  - Full summary
+  - Close button (X)
+- Future: Show entities (people, companies, products)
+
+#### 5. Cluster Timeline (Click "View Stories" on cluster)
+- Horizontal timeline visualization
+- Date axis: 1976 ————————— 2018
+- Stories as circles positioned by `parsed_date`
+- Hover → Tooltip with title
+- Click story → Opens story modal
+- Back button to return to map
+
+## Technical Architecture
+
+### Backend: FastAPI + SQLite
+
+**Server**: `map/server.py`
+
+**API Endpoints**:
+
+```
+GET /api/locations?zoom=<int>&bounds=<sw_lat>,<sw_lon>,<ne_lat>,<ne_lon>
+  Response: {
+    locations: [
+      { story_id, title, summary, date, lat, lon, confidence }
+    ],
+    clusters: [
+      { cluster_id, center_lat, center_lon, story_count, date_range, summary }
+    ]
+  }
+  Logic:
+    - If zoom < 12: Return clusters only
+    - If zoom >= 12: Return individual locations
+    - Filter by viewport bounds
+
+GET /api/story/<story_id>
+  Response: {
+    story_id, title, summary, parsed_date,
+    locations: [{ place_name, lat, lon }],
+    people: [{ name, role }],
+    companies: [{ name }],
+    products: [{ product_line, model }]
+  }
+
+GET /api/cluster/<cluster_id>
+  Response: {
+    cluster_id, center_lat, center_lon, summary,
+    key_themes: [...], date_range, story_count,
+    stories: [
+      { story_id, title, summary, parsed_date, lat, lon }
+    ]
+  }
+```
+
+**Dependencies** (`map/requirements.txt`):
+- fastapi
+- uvicorn[standard]
+- python-dotenv
+
+### LLM Cluster Pre-processing
+
+**Command**: `abxgeo cluster --db <path>`
+
+**Implementation**: `abxgeo/cluster.py`
+
+**Algorithm**:
+1. Query all locations with `resolved_lat IS NOT NULL`
+2. Spatial clustering using scikit-learn DBSCAN:
+   - For address-level precision: eps=500m (0.5km)
+   - For city-level precision: eps=5km
+3. Filter clusters with 3+ stories
+4. For each cluster:
+   - Fetch story titles, dates, summaries
+   - Call BAML `SummarizeCluster()` → GPT-5-mini
+   - Store in `location_clusters` table
+
+**BAML Function** (add to `baml_src/geocode.baml`):
+
+```baml
+class ClusterSummary {
+  summary string @description("2-3 sentence narrative summary of stories in this cluster")
+  key_themes string[] @description("3-5 key themes across stories")
+  date_range string @description("Date range like '1984-1997' or 'mid-1990s'")
+  story_count int
+}
+
+function SummarizeCluster(
+  stories: string[],
+  location_name: string,
+  zoom_level: int
+) -> ClusterSummary {
+  client GPT5Mini
+  prompt #"
+    Summarize these {{ stories | length }} stories at {{ location_name }}:
+
+    {% for story in stories %}
+    - {{ story }}
+    {% endfor %}
+
+    Create a compelling 2-3 sentence summary highlighting the narrative arc.
+    Extract 3-5 key themes (e.g., "manufacturing crises", "retail expansion", "supply chain").
+    Determine date range from the stories.
+  "#
+}
+```
+
+**Database Schema** (new table):
+
+```sql
+CREATE TABLE location_clusters (
+  cluster_id TEXT PRIMARY KEY,
+  center_lat REAL NOT NULL,
+  center_lon REAL NOT NULL,
+  zoom_level INTEGER,
+  story_ids_json TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  key_themes_json TEXT,
+  story_count INTEGER NOT NULL,
+  date_range TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_clusters_location ON location_clusters(center_lat, center_lon);
+CREATE INDEX idx_clusters_zoom ON location_clusters(zoom_level);
+```
+
+**Cost Estimate**:
+- ~150 clusters (3+ stories each)
+- Avg 5 stories × 100 words = 500 tokens input, 200 tokens output
+- GPT-5-mini: $0.25/1M input, $2/1M output
+- Total: (150 × 500 × $0.25/1M) + (150 × 200 × $2/1M) = $0.08 + $0.06 = **$0.14**
+
+### Frontend: Svelte + Google Maps API
+
+**Directory**: `map/frontend/`
+
+**Tech Stack**:
+- Svelte 4 + Vite
+- Google Maps JavaScript API
+- @googlemaps/markerclusterer (for marker clustering)
+- Vanilla SVG (for timeline, no D3.js dependency)
+
+**File Structure**:
+
+```
+map/frontend/
+├── src/
+│   ├── App.svelte                  # Root component
+│   ├── lib/
+│   │   ├── MapView.svelte          # Google Maps wrapper
+│   │   ├── StoryPopup.svelte       # Mini popup component
+│   │   ├── StoryModal.svelte       # Full story modal
+│   │   ├── ClusterPopup.svelte     # Cluster summary popup
+│   │   └── ClusterTimeline.svelte  # Timeline visualization
+│   ├── stores.js                   # Svelte stores (selected story, etc.)
+│   └── main.js                     # Entry point
+├── public/
+│   └── favicon.ico
+├── index.html
+├── package.json
+├── vite.config.js
+└── .env                            # VITE_GOOGLE_MAPS_API_KEY
+```
+
+**Key Components**:
+
+**MapView.svelte**:
+- Initializes Google Maps
+- Manages zoom level state
+- Fetches locations/clusters from API based on zoom + viewport bounds
+- Renders markers using AdvancedMarkerElement
+- Uses MarkerClusterer for dynamic clustering at street level
+- Handles marker click events
+
+**StoryPopup.svelte**:
+- Appears on marker click
+- Shows: title (bold, 1 line), date (gray, small), summary (first 50 chars)
+- "View Details" button → Opens StoryModal
+
+**StoryModal.svelte**:
+- Full-screen overlay (dark semi-transparent background)
+- White card centered on screen
+- Content: title (h1), date (subtitle), full summary (body text)
+- Close button (X in top-right)
+- Click outside to close
+
+**ClusterPopup.svelte**:
+- Appears on cluster marker click
+- Shows: LLM summary (2-3 sentences), story count, date range, key themes
+- "View Stories" button → Opens ClusterTimeline
+
+**ClusterTimeline.svelte**:
+- Horizontal timeline using SVG
+- X-axis: 1976 to 2018 (or cluster's actual date range)
+- Stories as circles positioned by `parsed_date`
+- Circle size: small (default) / large (hover)
+- Tooltip on hover: story title
+- Click circle → Opens StoryModal
+- Back button to return to map
+
+**Styling**:
+- Dark theme inspired by Apple aesthetics
+- Map fills entire viewport
+- Minimal UI chrome (no sidebars, no top bar)
+- Floating controls: zoom buttons, reset view button (top-right)
+- Typography: System font stack (San Francisco on macOS, Segoe UI on Windows)
+- Color palette:
+  - Background: #1a1a1a (dark gray)
+  - Cards: #2a2a2a (slightly lighter)
+  - Text: #ffffff (white)
+  - Accent: #0071e3 (Apple blue)
+  - Story markers: #ff6b35 (warm orange)
+  - Cluster markers: #4a90e2 (soft blue)
+
+**Google Maps Configuration**:
+- Map style: Dark theme (custom style JSON)
+- Controls: Zoom, full-screen only (no street view, no map type)
+- Gesture handling: greedy (no Ctrl+scroll required)
+- Min zoom: 2 (global view)
+- Max zoom: 18 (street view)
+
+### Dependencies
+
+**Python** (`map/requirements.txt`):
+```
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-dotenv==1.0.0
+scikit-learn==1.5.0
+numpy==2.1.0
+```
+
+**JavaScript** (`map/frontend/package.json`):
+```json
+{
+  "dependencies": {
+    "@googlemaps/markerclusterer": "^2.6.2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "svelte": "^4.2.0",
+    "vite": "^6.0.0"
+  }
+}
+```
+
+## Development Workflow
+
+### Setup
+
+```bash
+# 1. Install Python dependencies
+cd map
+pip install -r requirements.txt
+
+# 2. Install frontend dependencies
+cd frontend
+npm install
+
+# 3. Add BAML cluster function
+# Edit baml_src/geocode.baml to add SummarizeCluster
+baml-cli generate
+
+# 4. Generate clusters
+abxgeo cluster --db ../full_book.sqlite
+
+# 5. Set up environment variables
+cp .env.example .env
+# Edit .env to add GOOGLE_MAPS_API_KEY
+```
+
+### Running
+
+```bash
+# Terminal 1: Start API server
+cd map
+python server.py
+# Runs on http://localhost:8000
+
+# Terminal 2: Start frontend dev server
+cd map/frontend
+npm run dev
+# Runs on http://localhost:5173
+```
+
+### Building for Production
+
+```bash
+cd map/frontend
+npm run build
+# Outputs to dist/
+
+# Serve with static file server or integrate with FastAPI
+```
+
+## Phase 2 Features (Future)
+
+### Timeline Slider
+- Global timeline control at bottom of map
+- Drag to filter stories by date range
+- Animate through time (play button)
+
+### Search & Filters
+- Search bar for people, companies, products
+- Highlights relevant markers on map
+- Filter by story type/theme
+
+### Cross-Location Narratives
+- Draw lines connecting related stories
+- "Follow the supply chain" feature (Cupertino → Shenzhen → Zhengzhou)
+- Animated story paths
+
+### Share & Export
+- Generate shareable URLs with specific view/filters
+- Export story list for current viewport
+- Embed widget for external sites
+
+## Success Metrics
+
+### User Engagement
+- Time on map (target: 5+ minutes)
+- Stories viewed per session (target: 10+)
+- Clusters explored (target: 3+)
+
+### Technical Performance
+- Initial load time: < 2 seconds
+- Marker render time: < 500ms
+- API response time: < 200ms
+- Smooth 60fps pan/zoom
+
+### Data Quality
+- Cluster summary relevance (manual review of 20 samples)
+- Location accuracy (spot-check 50 locations)
+- Story completeness (all 448 locations visible)
+
+## Open Questions & Decisions
+
+### Resolved
+✅ **Map library**: Google Maps JavaScript API (already have key)
+✅ **Cluster approach**: Pre-compute with GPT-5-mini (cost-effective)
+✅ **Story modal content**: Title + summary only (phase 1)
+✅ **Cluster radius**: 500m (address), 5km (city)
+✅ **Models**: GPT-5-mini for clustering
+
+### Future Decisions
+- Should we geocode the 31 unresolved locations (6.5% failure rate)?
+- How to handle stories with multiple locations (show on map multiple times)?
+- Add "story density heatmap" layer toggle?
+- Support mobile/touch interactions?
+
+## Notes
+- All LLM calls use OpenAI Responses API (not Chat Completions)
+- Clustering is one-time batch process (re-run if stories change)
+- Google Maps API key must have Maps JavaScript API + Geocoding API enabled
+- Dark theme improves readability and focuses attention on map content
+- Timeline visualization only appears for clusters (not individual stories)
