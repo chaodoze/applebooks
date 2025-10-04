@@ -404,6 +404,134 @@ def clear_cache(db: Path, older_than: str):
     console.print(f"[green]Deleted {deleted} cache entries[/green]")
 
 
+@cli.command()
+@click.option("--db", required=True, type=click.Path(exists=True, path_type=Path), help="Path to SQLite database")
+@click.option("--min-stories", default=3, type=int, help="Minimum stories per cluster (default: 3)")
+@click.option(
+    "--address-eps", default=500, type=float, help="DBSCAN epsilon for address-level locations in meters (default: 500)"
+)
+@click.option(
+    "--city-eps", default=5000, type=float, help="DBSCAN epsilon for city-level locations in meters (default: 5000)"
+)
+@click.option("--force", is_flag=True, help="Regenerate all clusters (skip existing)")
+@click.option("--verbose", is_flag=True, help="Verbose output")
+def cluster(
+    db: Path,
+    min_stories: int,
+    address_eps: float,
+    city_eps: float,
+    force: bool,
+    verbose: bool,
+):
+    """
+    Generate geographic clusters and LLM summaries for story visualization.
+
+    This command groups nearby locations using DBSCAN clustering and generates
+    narrative summaries using GPT-5-mini via BAML. Results are stored in the
+    location_clusters table.
+
+    Examples:
+
+        abxgeo cluster --db library.sqlite
+
+        abxgeo cluster --db library.sqlite --address-eps 300 --force
+    """
+    from abxgeo.cluster import (
+        cluster_locations,
+        create_clusters_table,
+        get_location_name,
+        save_cluster,
+        summarize_cluster,
+    )
+
+    console.print("[bold cyan]ABXGeo - Cluster Generation[/bold cyan]\n")
+
+    # Create table if needed
+    create_clusters_table(db)
+
+    # Check if clusters already exist (unless --force)
+    conn = sqlite3.connect(db)
+    cursor = conn.execute("SELECT COUNT(*) FROM location_clusters")
+    existing_count = cursor.fetchone()[0]
+
+    if force and existing_count > 0:
+        # Clear existing clusters when forcing regeneration
+        console.print(f"[yellow]Clearing {existing_count} existing clusters...[/yellow]")
+        conn.execute("DELETE FROM location_clusters")
+        conn.commit()
+    elif existing_count > 0:
+        conn.close()
+        console.print(
+            f"[yellow]Found {existing_count} existing clusters. Use --force to regenerate.[/yellow]\n"
+            f"[dim]Run 'abxgeo stats --db {db}' to see cluster statistics[/dim]"
+        )
+        sys.exit(0)
+
+    conn.close()
+
+    # Cluster locations
+    console.print(f"[cyan]Clustering locations (address eps={address_eps}m, city eps={city_eps}m)...[/cyan]\n")
+    clusters = cluster_locations(
+        db_path=db,
+        min_stories=min_stories,
+        address_eps_meters=address_eps,
+        city_eps_meters=city_eps,
+        force=force,
+        verbose=verbose,
+    )
+
+    if not clusters:
+        console.print(f"[yellow]No clusters found (need at least {min_stories} stories per location)[/yellow]")
+        sys.exit(0)
+
+    console.print(f"[green]Generated {len(clusters)} clusters[/green]\n")
+
+    # Generate summaries
+    conn = sqlite3.connect(db)
+    saved_count = 0
+
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+    async def process_clusters():
+        nonlocal saved_count
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress_bar:
+            task = progress_bar.add_task(f"Generating summaries for {len(clusters)} clusters...", total=len(clusters))
+
+            for clus in clusters:
+                # Get location name
+                location_name = get_location_name(clus["center_lat"], clus["center_lon"], conn)
+
+                # Generate summary (async)
+                summary = await summarize_cluster(clus, location_name, verbose=verbose)
+
+                # Save to database
+                cluster_id = save_cluster(db, clus, summary)
+                saved_count += 1
+
+                if verbose:
+                    console.print(
+                        f"[dim]  Saved {cluster_id}: {summary['story_count']} stories, {summary['date_range']}[/dim]"
+                    )
+
+                progress_bar.update(task, advance=1)
+
+    # Run async processing
+    asyncio.run(process_clusters())
+
+    conn.close()
+
+    console.print(f"\n[green]✓ Successfully generated {saved_count} clusters[/green]")
+    console.print(f"[dim]Run map server to visualize clusters[/dim]")
+
+
 def main():
     """Entry point."""
     cli()

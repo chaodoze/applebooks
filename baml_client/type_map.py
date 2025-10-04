@@ -19,6 +19,9 @@ type_map = {
     "types.AddressResolution": types.AddressResolution,
     "stream_types.AddressResolution": stream_types.AddressResolution,
 
+    "types.ClusterSummary": types.ClusterSummary,
+    "stream_types.ClusterSummary": stream_types.ClusterSummary,
+
     "types.Company": types.Company,
     "stream_types.Company": stream_types.Company,
 

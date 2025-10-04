@@ -41,7 +41,7 @@ def all_succeeded(checks: typing.Dict[CheckName, Check]) -> bool:
 # #########################################################################
 
 # #########################################################################
-# Generated classes (11)
+# Generated classes (12)
 # #########################################################################
 
 class AddressResolution(BaseModel):
@@ -56,6 +56,12 @@ class AddressResolution(BaseModel):
     corroboration: typing.List[str]
     concerns: typing.List[str]
     reasoning: str
+
+class ClusterSummary(BaseModel):
+    summary: str
+    key_themes: typing.List[str]
+    date_range: str
+    story_count: int
 
 class Company(BaseModel):
     name: str

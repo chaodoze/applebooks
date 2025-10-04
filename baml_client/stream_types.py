@@ -23,7 +23,7 @@ class StreamState(BaseModel, typing.Generic[StreamStateValueT]):
     value: StreamStateValueT
     state: typing_extensions.Literal["Pending", "Incomplete", "Complete"]
 # #########################################################################
-# Generated classes (11)
+# Generated classes (12)
 # #########################################################################
 
 class AddressResolution(BaseModel):
@@ -38,6 +38,12 @@ class AddressResolution(BaseModel):
     corroboration: typing.List[str]
     concerns: typing.List[str]
     reasoning: typing.Optional[str] = None
+
+class ClusterSummary(BaseModel):
+    summary: typing.Optional[str] = None
+    key_themes: typing.List[str]
+    date_range: typing.Optional[str] = None
+    story_count: typing.Optional[int] = None
 
 class Company(BaseModel):
     name: typing.Optional[str] = None

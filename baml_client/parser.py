@@ -42,6 +42,12 @@ class LlmResponseParser:
         result = self.__options.merge_options(baml_options).parse_response(function_name="FindPreciseAddress", llm_response=llm_response, mode="request")
         return typing.cast(types.AddressResolution, result)
 
+    def SummarizeCluster(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> types.ClusterSummary:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="SummarizeCluster", llm_response=llm_response, mode="request")
+        return typing.cast(types.ClusterSummary, result)
+
     
 
 class LlmStreamParser:
@@ -67,5 +73,11 @@ class LlmStreamParser:
     ) -> stream_types.AddressResolution:
         result = self.__options.merge_options(baml_options).parse_response(function_name="FindPreciseAddress", llm_response=llm_response, mode="stream")
         return typing.cast(stream_types.AddressResolution, result)
+
+    def SummarizeCluster(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> stream_types.ClusterSummary:
+        result = self.__options.merge_options(baml_options).parse_response(function_name="SummarizeCluster", llm_response=llm_response, mode="stream")
+        return typing.cast(stream_types.ClusterSummary, result)
 
     

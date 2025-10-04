@@ -204,3 +204,78 @@ client<llm> GPT5Mini {
     model "gpt-5-mini"
   }
 }
+
+
+// ============================================================================
+// CLUSTER SUMMARIZATION
+// ============================================================================
+// Used by abxgeo cluster command to generate narrative summaries for clusters
+
+class ClusterSummary {
+  summary string @description("2-3 sentence narrative summary highlighting the story arc at this location")
+  key_themes string[] @description("3-5 key themes across stories (e.g., 'manufacturing crises', 'retail expansion')")
+  date_range string @description("Date range like '1984-1997' or 'mid-1990s' or '2010s'")
+  story_count int @description("Number of stories in this cluster")
+}
+
+function SummarizeCluster(
+  stories: string[],
+  location_name: string,
+  zoom_level: int
+) -> ClusterSummary {
+  client GPT5Mini
+  prompt #"
+    You are creating a compelling narrative summary for a geographic cluster of stories.
+
+    LOCATION: {{ location_name }}
+    ZOOM LEVEL: {{ zoom_level }}
+    STORY COUNT: {{ stories | length }}
+
+    STORIES:
+    {% for story in stories %}
+    {{ loop.index }}. {{ story }}
+    {% endfor %}
+
+    TASK:
+    Analyze these {{ stories | length }} stories and create a narrative summary that:
+    1. Highlights the story arc and key events at this location
+    2. Emphasizes what makes this location significant
+    3. Captures the time period and evolution of events
+    4. Is engaging and informative (2-3 sentences)
+
+    EXAMPLES OF GOOD SUMMARIES:
+
+    Location: Cupertino, California
+    Stories: 15 stories about iMac manufacturing, 1998-1999
+    ✓ GOOD: "In 1998-1999, Apple's Cupertino campus became the epicenter of the iMac crisis. Engineers battled 'unmanufacturable' designs, faced explosive tooling reviews from Steve Jobs, and orchestrated a dramatic turnaround that shipped the translucent computer on time. The saga included contractor failures, 24/7 'Man on Mir' embeds at suppliers, and Jony Ive's private apologies."
+
+    Location: Shenzhen, China
+    Stories: 8 stories about Foxconn iPhone production, 2010-2015
+    ✓ GOOD: "Foxconn's Shenzhen facilities transformed from Mac enclosure supplier in the late 1990s to the heart of iPhone mass production in the 2010s. The campus housed hundreds of thousands of workers, faced labor scrutiny from Apple audits, and pioneered high-precision manufacturing techniques that defined modern consumer electronics."
+
+    EXTRACT KEY THEMES:
+    Identify 3-5 recurring themes across the stories. Examples:
+    - "manufacturing crises"
+    - "retail expansion"
+    - "supply chain optimization"
+    - "labor conditions"
+    - "design conflicts"
+    - "regulatory challenges"
+    - "executive leadership"
+
+    DETERMINE DATE RANGE:
+    Extract the date range from the stories. Format examples:
+    - "1984-1997" (specific years)
+    - "mid-1990s" (decade reference)
+    - "2010s" (decade)
+    - "1976" (single year if all stories from same year)
+
+    Return JSON with ClusterSummary structure:
+    {
+      "summary": "2-3 sentence narrative...",
+      "key_themes": ["theme1", "theme2", "theme3"],
+      "date_range": "YYYY-YYYY or description",
+      "story_count": {{ stories | length }}
+    }
+  "#
+}

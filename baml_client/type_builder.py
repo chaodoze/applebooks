@@ -20,7 +20,7 @@ from .globals import DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIM
 class TypeBuilder(type_builder.TypeBuilder):
     def __init__(self):
         super().__init__(classes=set(
-          ["AddressResolution","Company","DateInfo","Location","LocationClassification","Media","Person","Product","Provenance","Relationships","Story",]
+          ["AddressResolution","ClusterSummary","Company","DateInfo","Location","LocationClassification","Media","Person","Product","Provenance","Relationships","Story",]
         ), enums=set(
           []
         ), runtime=DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIME)
@@ -31,12 +31,16 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
     # #########################################################################
-    # Generated classes 11
+    # Generated classes 12
     # #########################################################################
 
     @property
     def AddressResolution(self) -> "AddressResolutionViewer":
         return AddressResolutionViewer(self)
+
+    @property
+    def ClusterSummary(self) -> "ClusterSummaryViewer":
+        return ClusterSummaryViewer(self)
 
     @property
     def Company(self) -> "CompanyViewer":
@@ -86,7 +90,7 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
 # #########################################################################
-# Generated classes 11
+# Generated classes 12
 # #########################################################################
 
 class AddressResolutionAst:
@@ -164,6 +168,57 @@ class AddressResolutionProperties:
     @property
     def reasoning(self) -> type_builder.ClassPropertyViewer:
         return type_builder.ClassPropertyViewer(self.__bldr.property("reasoning"))
+    
+    
+
+
+class ClusterSummaryAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("ClusterSummary")
+        self._properties: typing.Set[str] = set([  "summary",  "key_themes",  "date_range",  "story_count",  ])
+        self._props = ClusterSummaryProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "ClusterSummaryProperties":
+        return self._props
+
+
+class ClusterSummaryViewer(ClusterSummaryAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class ClusterSummaryProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def summary(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("summary"))
+    
+    @property
+    def key_themes(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("key_themes"))
+    
+    @property
+    def date_range(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("date_range"))
+    
+    @property
+    def story_count(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("story_count"))
     
     
 
