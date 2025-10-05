@@ -98,7 +98,6 @@
 
   function renderClusters(clusters) {
     if (!clusters || clusters.length === 0) {
-      console.log('[MapView] No clusters to render');
       return;
     }
 

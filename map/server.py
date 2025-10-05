@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator
@@ -13,6 +14,12 @@ from sklearn.cluster import DBSCAN
 
 # Database path (relative to this file)
 DB_PATH = Path(__file__).parent.parent / "full_book.sqlite"
+
+# Validate environment on startup
+if not DB_PATH.exists():
+    print(f"ERROR: Database not found at {DB_PATH}", file=sys.stderr)
+    print(f"Please ensure the database exists before starting the server.", file=sys.stderr)
+    sys.exit(1)
 
 app = FastAPI(title="Story Map API", description="API for visualizing geocoded stories on a map", version="1.0.0")
 
@@ -128,9 +135,18 @@ def cluster_locations(locations: list[dict], epsilon_radians: float, min_samples
                 seen_ids.add(loc["story_id"])
                 unique_stories.append(loc)
 
-        # Extract date range
+        # Extract date range efficiently (single pass)
         dates = [loc.get("date") for loc in unique_stories if loc.get("date")]
-        date_range = f"{min(dates)}–{max(dates)}" if dates else None
+        if dates:
+            min_date = max_date = dates[0]
+            for date in dates[1:]:
+                if date < min_date:
+                    min_date = date
+                if date > max_date:
+                    max_date = date
+            date_range = f"{min_date}–{max_date}"
+        else:
+            date_range = None
 
         result.append({
             "center_lat": float(center_lat),

@@ -36,8 +36,8 @@
   }
 
   function selectStory(story) {
+    close(); // Close cluster timeline first
     selectedStory.set(story);
-    close();
   }
 
   // Helper to parse years from dates
@@ -70,18 +70,21 @@
 
     const minYear = Math.min(...years);
     const maxYear = Math.max(...years);
-    const yearRange = maxYear - minYear || 1;
+    const yearRange = Math.max(maxYear - minYear, 1); // Ensure yearRange is at least 1
 
     return {
       minYear,
       maxYear,
       yearRange,
       hasTimeline: true,
-      stories: stories.map(story => ({
-        ...story,
-        year: getYear(story.date),
-        position: getYear(story.date) ? ((getYear(story.date) - minYear) / yearRange) * 100 : 50,
-      })),
+      stories: stories.map(story => {
+        const storyYear = getYear(story.date);
+        return {
+          ...story,
+          year: storyYear,
+          position: storyYear ? ((storyYear - minYear) / yearRange) * 100 : 50,
+        };
+      }),
     };
   }
 </script>
