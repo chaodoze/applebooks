@@ -49,7 +49,7 @@ def zoom_to_epsilon(zoom: int) -> float:
     EARTH_RADIUS_KM = 6371
 
     if zoom <= 4:
-        return 500 / EARTH_RADIUS_KM  # ~500km - keep continents separate
+        return 2000 / EARTH_RADIUS_KM  # ~2000km - cluster country-level locations
     elif zoom <= 7:
         return 100 / EARTH_RADIUS_KM  # ~100km - regional clusters
     elif zoom <= 9:
@@ -215,8 +215,19 @@ def get_locations(
         # Add cluster IDs and format response
         for i, cluster in enumerate(clusters):
             cluster["cluster_id"] = f"dynamic_{zoom}_{i}"
-            # Simple summary: just location names and count
-            cluster["summary"] = f"{cluster['story_count']} stories"
+
+            # Generate meaningful summary with location context
+            cluster_stories = cluster["stories"]
+            location_names = set()
+            for loc in cluster_stories[:5]:  # Sample first 5 for location names
+                if loc.get("place_name"):
+                    # Extract city/area from place name
+                    parts = loc["place_name"].split(",")
+                    location_names.add(parts[0].strip())
+
+            location_str = ", ".join(list(location_names)[:3]) if location_names else "this area"
+            date_str = f" ({cluster['date_range']})" if cluster.get('date_range') else ""
+            cluster["summary"] = f"{cluster['story_count']} stories in {location_str}{date_str}"
 
         response["clusters"] = clusters
     else:

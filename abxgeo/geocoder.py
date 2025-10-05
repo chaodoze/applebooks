@@ -3,6 +3,19 @@
 from geopy.geocoders import GoogleV3, Nominatim
 from geopy.location import Location
 
+# Canonical coordinates for country-level locations
+# These ensure all references to the same country cluster together
+COUNTRY_COORDINATES = {
+    "United States": (39.8283, -98.5795),  # Geographic center of contiguous US
+    "China": (35.8617, 104.1954),  # Geographic center
+    "Japan": (36.2048, 138.2529),  # Geographic center
+    "South Korea": (35.9078, 127.7669),  # Geographic center
+    "Taiwan": (23.6978, 120.9605),  # Geographic center
+    "India": (20.5937, 78.9629),  # Geographic center
+    "Vietnam": (14.0583, 108.2772),  # Geographic center
+    # Add more as needed
+}
+
 
 class GeocoderCascade:
     """Geocodes addresses using a cascade of services."""
@@ -36,9 +49,10 @@ class GeocoderCascade:
         Geocode an address using cascade of services.
 
         Tries in order:
-        1. Google Maps (if API key provided) - 10k free calls/month, superior accuracy
-        2. Nominatim (free, OpenStreetMap) - fallback, respects rate limits
-        3. Mapbox (if API key provided) - additional fallback
+        1. Check if address is a known country (use canonical coordinates)
+        2. Google Maps (if API key provided) - 10k free calls/month, superior accuracy
+        3. Nominatim (free, OpenStreetMap) - fallback, respects rate limits
+        4. Mapbox (if API key provided) - additional fallback
 
         Args:
             address: Address to geocode
@@ -53,15 +67,42 @@ class GeocoderCascade:
                 - source: Which geocoder was used
             Or None if geocoding failed
         """
+        # Check if this is a country-level location that should use canonical coordinates
+        for country, (lat, lon) in COUNTRY_COORDINATES.items():
+            if address.strip().lower() == country.lower():
+                return {
+                    "address": country,
+                    "lat": lat,
+                    "lon": lon,
+                    "precision": "country",
+                    "source": "canonical",
+                }
+
         # Try Google first (10k free calls/month, best accuracy)
         if self.google:
             result = self._try_google(address, timeout)
             if result:
+                # Normalize country-level results to canonical coordinates
+                if result["precision"] == "country":
+                    for country, (lat, lon) in COUNTRY_COORDINATES.items():
+                        if country.lower() in result["address"].lower():
+                            result["lat"] = lat
+                            result["lon"] = lon
+                            result["address"] = country
+                            break
                 return result
 
         # Fallback to Nominatim (free, but less accurate)
         result = self._try_nominatim(address, timeout)
         if result:
+            # Normalize country-level results to canonical coordinates
+            if result["precision"] == "country":
+                for country, (lat, lon) in COUNTRY_COORDINATES.items():
+                    if country.lower() in result["address"].lower():
+                        result["lat"] = lat
+                        result["lon"] = lon
+                        result["address"] = country
+                        break
             return result
 
         # Could add Mapbox here if needed
