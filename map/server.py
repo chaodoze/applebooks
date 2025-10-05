@@ -1,6 +1,7 @@
 """FastAPI server for story map visualization."""
 
 import json
+import os
 import sqlite3
 import sys
 from contextlib import contextmanager
@@ -12,8 +13,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sklearn.cluster import DBSCAN
 
-# Database path (relative to this file)
-DB_PATH = Path(__file__).parent.parent / "full_book.sqlite"
+# Database path - configurable via environment variable for easy swapping
+DB_PATH = Path(os.getenv("DB_PATH", Path(__file__).parent.parent / "full_book.sqlite"))
 
 # Validate environment on startup
 if not DB_PATH.exists():

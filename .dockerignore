@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.sqlite
+*.epub
+backup/
+test_*.sqlite
+full_book.sqlite
+
+# Node/Frontend
+map/frontend/node_modules/
+map/frontend/dist/
+map/frontend/.svelte-kit/
+
+# Docs
+*.md
+!CLAUDE.md
+
+# Deployment
+.env
+docker-compose.override.yml
