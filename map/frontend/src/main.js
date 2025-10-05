@@ -4,7 +4,7 @@ import App from './App.svelte'
 
 // Validate required environment variables
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 if (!GOOGLE_MAPS_API_KEY) {
   console.error('ERROR: VITE_GOOGLE_MAPS_API_KEY is not set');

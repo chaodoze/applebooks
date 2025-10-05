@@ -29,9 +29,9 @@ client<llm> AutoModel {
 }
 
 class DateInfo {
-  asserted_text string? @description("Original date text from chapter")
-  parsed string? @description("Parsed date in EDTF-ish format, e.g., '1984-03~'")
-  precision string? @description("Precision: year, month, day, quarter, decade")
+  asserted_text string? @description("ALWAYS capture original date text verbatim from chapter, e.g., 'spring 1984', 'early 1980s', 'March 1996'")
+  parsed string? @description("Parse to ISO 8601 EDTF format: '1984-03~' (approx), '1984?' (uncertain), '1984-03/1984-06' (range), '198X' (1980s), '1984-XX' (sometime in 1984)")
+  precision string? @description("Auto-filled from parsed format: 'day', 'month', 'year', 'decade', 'range'")
 }
 
 class Location {
@@ -90,7 +90,7 @@ class Media {
 class Story {
   story_id string @description("Use 'auto_or_uuid' to auto-generate")
   title string @description("Short descriptive title")
-  summary string @description("2-3 sentence neutral summary")
+  summary string @description("Compelling 200-350 char story excerpt for map pins. Front-load drama/conflict/scale. Include vivid details (quotes, numbers, sensory descriptions). Assume reader skimmed book - provide context.")
   dates DateInfo? @description("Date information")
   locations Location[]? @description("Locations mentioned in the story")
   forward_locale Location? @description("Forward-looking location where impact occurred")
@@ -145,23 +145,52 @@ function ExtractStories(chapter_text: string, book_context: string) -> Story[] {
     5. Include provenance when available
     6. Assign confidence based on narrative detail and specificity (range: 0.5-0.8 is typical)
     7. Extract only factual information, not speculation
-    8. For dates, capture the original text and attempt parsing
-    9. For locations - ALWAYS extract place names mentioned in text:
+    8. For SUMMARIES - write compelling story excerpts for map pins (200-350 chars):
+       - Front-load the most dramatic/interesting element: conflict, surprise, scale, stakes
+       - Include vivid details: specific numbers, direct quotes, sensory descriptions
+       - Provide context for readers who only skimmed the book - explain significance
+       - Show what was at risk or why this moment mattered
+       - Examples of transformation:
+         * Weak: "Apple had a trademark dispute in China"
+         * Strong: "Apple paid $60 million to settle after Chinese courts ruled Shenzhen-based Proview had registered 'iPad' in 2000, threatening tablet sales across China"
+    9. For DATES - extract if present in text (don't hallucinate):
+       - IF a date/timeframe is mentioned in the chapter text:
+         * asserted_text: REQUIRED - capture the exact original phrase verbatim
+         * parsed: REQUIRED - convert to ISO 8601 EDTF format
+         * precision: REQUIRED - specify granularity
+       - Rough timeframes are better than nothing (e.g., "early 2000s", "following year")
+       - IF no date/timeframe in text: set dates to null (don't guess or infer)
+
+       EDTF format examples:
+       * "March 15, 2013" → asserted_text: "March 15, 2013", parsed: "2013-03-15", precision: "day"
+       * "spring 1984" → asserted_text: "spring 1984", parsed: "1984-03/1984-06", precision: "range"
+       * "early 1980s" → asserted_text: "early 1980s", parsed: "1981/1985", precision: "range"
+       * "late March 1996" → asserted_text: "late March 1996", parsed: "1996-03~", precision: "month"
+       * "summer of 1997" → asserted_text: "summer of 1997", parsed: "1997-06/1997-09", precision: "range"
+       * "1984" → asserted_text: "1984", parsed: "1984", precision: "year"
+       * "1980s" → asserted_text: "1980s", parsed: "198X", precision: "decade"
+       * "around 2015" → asserted_text: "around 2015", parsed: "2015~", precision: "year"
+       * "possibly 1984" → asserted_text: "possibly 1984", parsed: "1984?", precision: "year"
+    10. For LOCATIONS - capture rich contextual notes for geocoding:
        - place_name: REQUIRED - extract the location name
        - lat/lon: OPTIONAL - provide coordinates when possible:
          * If text has exact coordinates → use them, set geo_precision: "exact"
          * For well-known places (major cities, famous buildings, company headquarters) → provide approximate coordinates from your knowledge
          * Set geo_precision appropriately: "approximate-building" (for specific buildings), "approximate-city" (for cities), "approximate-region" (for regions/states)
          * For unknown/ambiguous places → leave lat/lon null
-       - note: Include contextual details from the text to help with future geocoding:
-         * When mentioned: year/date, specific function, named entities, size/ownership, story context
-         * Preserve the location's original context from the chapter text
+       - note: Include rich contextual details from text to assist future precise geocoding:
+         * Temporal markers: "Fremont factory (1984-1996, closed due to Mac sales collapse)"
+         * Functional details: "340,000 sq ft Macintosh assembly plant, 27-second cycle time"
+         * Named entities: "Acquired by SCI Systems for ~$200M in March 1996"
+         * Scale/ownership: "Apple's $20M state-of-the-art factory"
+         * Story significance: Why this location matters to the narrative
+         * Example: "Foxconn Longhua facility, Shenzhen (2010-present). 230k workers, iPhone assembly. Site of 2010 worker suicides."
        - place_type: factory, headquarters, city, campus, office, lab, etc. (when evident)
-    10. For people, extract names and roles when mentioned
-    11. For companies, extract names and their relationship to the story
-    12. For products, extract product names and details
-    13. Extract themes, event_type, and tone when evident from the narrative
-    14. When in doubt, prefer inclusion if the story has concrete grounding details
+    11. For people, extract names and roles when mentioned
+    12. For companies, extract names and their relationship to the story
+    13. For products, extract product names and details
+    14. Extract themes, event_type, and tone when evident from the narrative
+    15. When in doubt, prefer inclusion if the story has concrete grounding details
 
     Return a JSON array of Story objects matching the schema.
   "#

@@ -4,7 +4,7 @@
   import StoryPopup from './StoryPopup.svelte';
   import ClusterPopup from './ClusterPopup.svelte';
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
   let mapContainer;
   let map;
@@ -103,7 +103,7 @@
 
     console.log(`[MapView] Rendering ${clusters.length} clusters`);
 
-    clusters.forEach(cluster => {
+    const clusterMarkers = clusters.map(cluster => {
       try {
         const marker = new google.maps.Marker({
           position: { lat: cluster.center_lat, lng: cluster.center_lon },
@@ -129,12 +129,15 @@
           showClusterPopup(cluster, marker);
         });
 
-        markers.push(marker);
         console.log(`[MapView] Created cluster marker at ${cluster.center_lat}, ${cluster.center_lon}`);
+        return marker;
       } catch (error) {
         console.error('[MapView] Error creating cluster marker:', error, cluster);
+        return null;
       }
-    });
+    }).filter(marker => marker !== null);
+
+    markers.push(...clusterMarkers);
   }
 
   function renderLocations(locations) {
@@ -161,7 +164,7 @@
     });
 
     // Don't use MarkerClusterer - we handle clustering on backend
-    markers = markerElements;
+    markers.push(...markerElements);
   }
 
   function showStoryPopup(story, marker) {

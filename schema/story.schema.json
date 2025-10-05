@@ -15,14 +15,24 @@
       },
       "summary": {
         "type": "string",
-        "description": "2-3 sentence neutral summary of what happened"
+        "description": "Compelling 200-350 character story excerpt for map pins. Front-load drama/conflict/scale with vivid details. Provide context for readers who skimmed the book."
       },
       "dates": {
         "type": "object",
         "properties": {
-          "asserted_text": {"type": "string"},
-          "parsed": {"type": "string"},
-          "precision": {"type": "string", "enum": ["year", "month", "day", "quarter", "decade"]}
+          "asserted_text": {
+            "type": "string",
+            "description": "ALWAYS capture original date text verbatim from chapter. Examples: 'spring 1984', 'early 1980s', 'late March 1996', 'summer of 1997'"
+          },
+          "parsed": {
+            "type": "string",
+            "description": "ISO 8601 EDTF format with markers: '1984-03~' (approx), '1984?' (uncertain), '1984-03/1984-06' (range), '198X' (1980s), '1984-XX' (unspecified)"
+          },
+          "precision": {
+            "type": "string",
+            "enum": ["day", "month", "year", "decade", "range"],
+            "description": "Auto-filled from parsed format: 'day' (1984-03-15), 'month' (1984-03~), 'year' (1984~), 'decade' (198X), 'range' (1984-03/1984-06)"
+          }
         }
       },
       "locations": {
@@ -30,26 +40,68 @@
         "items": {
           "type": "object",
           "properties": {
-            "place_name": {"type": "string", "description": "Name of the place (required)"},
-            "lat": {"type": "number", "description": "Latitude coordinate (optional)"},
-            "lon": {"type": "number", "description": "Longitude coordinate (optional)"},
-            "place_type": {"type": "string", "description": "Type of place: office, lab, factory, city, headquarters, campus, etc."},
-            "geo_precision": {"type": "string", "description": "Precision of coordinates: 'exact' (from text), 'approximate-building', 'approximate-city', 'approximate-region', or null if no coordinates"},
-            "visitability": {"type": "string", "description": "public, private, historical"},
-            "note": {"type": "string", "description": "Additional context from text to assist future geocoding (e.g., 'Apple Park headquarters, Cupertino' or 'Foxconn factory in Shenzhen')"}
+            "place_name": {
+              "type": "string",
+              "description": "Name of the place (required)"
+            },
+            "lat": {
+              "type": "number",
+              "description": "Latitude coordinate (optional - provide for well-known places)"
+            },
+            "lon": {
+              "type": "number",
+              "description": "Longitude coordinate (optional - provide for well-known places)"
+            },
+            "place_type": {
+              "type": "string",
+              "description": "Type of place: factory, headquarters, city, campus, office, lab, restaurant, hotel, etc."
+            },
+            "geo_precision": {
+              "type": "string",
+              "description": "Precision: 'exact' (from text), 'approximate-building', 'approximate-city', 'approximate-region', or null"
+            },
+            "visitability": {
+              "type": "string",
+              "description": "public, private, historical"
+            },
+            "note": {
+              "type": "string",
+              "description": "Rich contextual details for future geocoding: temporal markers (years active), functional details (sq ft, purpose), named entities (ownership), scale, story significance. Example: 'Fremont factory (1984-1996). $20M state-of-the-art facility, 27-sec cycle time. Closed due to Mac sales collapse, workforce laid off.'"
+            }
           }
         }
       },
       "forward_locale": {
         "type": "object",
         "properties": {
-          "place_name": {"type": "string", "description": "Name of the forward-looking location"},
-          "lat": {"type": "number", "description": "Latitude coordinate (optional)"},
-          "lon": {"type": "number", "description": "Longitude coordinate (optional)"},
-          "place_type": {"type": "string", "description": "Type of place"},
-          "geo_precision": {"type": "string", "description": "Precision: 'exact', 'approximate-building', 'approximate-city', 'approximate-region', or null"},
-          "visitability": {"type": "string", "description": "public, private, historical"},
-          "note": {"type": "string", "description": "Context from text for future precise geocoding"}
+          "place_name": {
+            "type": "string",
+            "description": "Name of the forward-looking location"
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude coordinate (optional)"
+          },
+          "lon": {
+            "type": "number",
+            "description": "Longitude coordinate (optional)"
+          },
+          "place_type": {
+            "type": "string",
+            "description": "Type of place: factory, headquarters, city, campus, market, etc."
+          },
+          "geo_precision": {
+            "type": "string",
+            "description": "Precision: 'exact', 'approximate-building', 'approximate-city', 'approximate-region', or null"
+          },
+          "visitability": {
+            "type": "string",
+            "description": "public, private, historical"
+          },
+          "note": {
+            "type": "string",
+            "description": "Rich contextual details: temporal markers, functional details, named entities, scale, story significance"
+          }
         }
       },
       "people": {
