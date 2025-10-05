@@ -99,15 +99,23 @@ def cluster_locations(locations: list[dict], epsilon_radians: float, min_samples
         center_lat = np.mean([loc["lat"] for loc in cluster_locs])
         center_lon = np.mean([loc["lon"] for loc in cluster_locs])
 
+        # Deduplicate stories by story_id (same story can have multiple locations)
+        seen_ids = set()
+        unique_stories = []
+        for loc in cluster_locs:
+            if loc["story_id"] not in seen_ids:
+                seen_ids.add(loc["story_id"])
+                unique_stories.append(loc)
+
         # Extract date range
-        dates = [loc.get("date") for loc in cluster_locs if loc.get("date")]
+        dates = [loc.get("date") for loc in unique_stories if loc.get("date")]
         date_range = f"{min(dates)}–{max(dates)}" if dates else None
 
         result.append({
             "center_lat": float(center_lat),
             "center_lon": float(center_lon),
-            "story_count": len(cluster_locs),
-            "stories": cluster_locs,
+            "story_count": len(unique_stories),
+            "stories": unique_stories,
             "date_range": date_range,
         })
 
