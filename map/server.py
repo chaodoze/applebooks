@@ -41,15 +41,18 @@ def zoom_to_epsilon(zoom: int) -> float:
     5-7: Regional view (states/regions within country)
     8-10: City view
     11-13: Neighborhood view
-    14+: Street view (show individual markers)
+    14-16: Street/building view (tight clustering for overlapping markers)
+    17+: Individual markers
 
     Returns epsilon in radians for haversine distance.
     """
     # Convert km to radians: radians = km / earth_radius_km
     EARTH_RADIUS_KM = 6371
 
-    if zoom <= 4:
+    if zoom <= 3:
         return 2000 / EARTH_RADIUS_KM  # ~2000km - cluster country-level locations
+    elif zoom <= 4:
+        return 500 / EARTH_RADIUS_KM  # ~500km - separate coasts/regions
     elif zoom <= 7:
         return 100 / EARTH_RADIUS_KM  # ~100km - regional clusters
     elif zoom <= 9:
@@ -58,6 +61,12 @@ def zoom_to_epsilon(zoom: int) -> float:
         return 5 / EARTH_RADIUS_KM  # ~5km - neighborhood clusters
     elif zoom <= 13:
         return 1 / EARTH_RADIUS_KM  # ~1km - block-level clusters
+    elif zoom <= 14:
+        return 0.1 / EARTH_RADIUS_KM  # ~100m - building clusters
+    elif zoom <= 15:
+        return 0.05 / EARTH_RADIUS_KM  # ~50m - tight building clusters
+    elif zoom <= 16:
+        return 0.01 / EARTH_RADIUS_KM  # ~10m - same-location clusters
     else:
         return 0.0  # No clustering, show individual markers
 
@@ -148,8 +157,8 @@ def get_locations(
     Get locations and clusters for current viewport and zoom level.
 
     Dynamic clustering approach:
-    - Zoom 1-13: Cluster locations with zoom-appropriate epsilon
-    - Zoom 14+: Return individual location markers
+    - Zoom 1-16: Cluster locations with zoom-appropriate epsilon
+    - Zoom 17+: Return individual location markers
 
     All filtered by viewport bounds.
     """
@@ -158,9 +167,17 @@ def get_locations(
 
     print(f"[DEBUG] /api/locations: zoom={zoom}, bounds=({sw_lat}, {sw_lon}) to ({ne_lat}, {ne_lon})")
 
+    # Determine minimum precision based on zoom level
+    # At world view (1-3): show all precisions
+    # At regional view and closer (4+): hide country-level (too vague)
+    if zoom <= 3:
+        precision_filter = ""
+    else:
+        precision_filter = "AND sl.resolved_precision != 'country'"
+
     # Fetch all locations in viewport
     cursor = conn.execute(
-        """
+        f"""
         SELECT
             sl.story_id,
             sl.place_name,
@@ -177,6 +194,7 @@ def get_locations(
         WHERE sl.resolved_lat IS NOT NULL
           AND sl.resolved_lat BETWEEN ? AND ?
           AND sl.resolved_lon BETWEEN ? AND ?
+          {precision_filter}
         ORDER BY sl.resolution_confidence DESC
     """,
         (sw_lat, ne_lat, sw_lon, ne_lon),
