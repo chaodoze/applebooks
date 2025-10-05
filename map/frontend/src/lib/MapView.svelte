@@ -1,16 +1,14 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { selectedStory, selectedCluster, mapInstance, currentZoom } from '../stores.js';
   import StoryPopup from './StoryPopup.svelte';
   import ClusterPopup from './ClusterPopup.svelte';
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-  const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
   let mapContainer;
   let map;
   let markers = [];
-  let currentPopup = null;
   let loadTimeout = null;
 
   // Popup component state
@@ -51,6 +49,15 @@
     loadLocations();
   });
 
+  onDestroy(() => {
+    // Clear pending debounce timer
+    if (loadTimeout) {
+      clearTimeout(loadTimeout);
+    }
+    // Clean up markers
+    clearMarkers();
+  });
+
   async function loadLocations() {
     if (!map) return;
 
@@ -65,20 +72,27 @@
       const response = await fetch(
         `${API_BASE_URL}/api/locations?zoom=${zoom}&sw_lat=${sw.lat()}&sw_lon=${sw.lng()}&ne_lat=${ne.lat()}&ne_lon=${ne.lng()}`
       );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
 
       // Clear existing markers
       clearMarkers();
 
-      if (zoom < 17) {
-        // Show clusters (dynamic clustering handles zoom 1-16)
+      // Always render both clusters and individual locations
+      // Backend handles the logic of when to cluster vs show individuals
+      if (data.clusters && data.clusters.length > 0) {
         renderClusters(data.clusters);
-      } else {
-        // Show individual locations (zoom 17+)
+      }
+      if (data.locations && data.locations.length > 0) {
         renderLocations(data.locations);
       }
     } catch (error) {
       console.error('Error loading locations:', error);
+      // Don't clear markers on error - keep showing last successful data
     }
   }
 
@@ -151,35 +165,6 @@
     markers = markerElements;
   }
 
-  function createStoryMarkerContent() {
-    const div = document.createElement('div');
-    div.style.width = '20px';
-    div.style.height = '20px';
-    div.style.borderRadius = '50%';
-    div.style.backgroundColor = '#ff6b35';
-    div.style.border = '2px solid white';
-    div.style.cursor = 'pointer';
-    return div;
-  }
-
-  function createClusterMarkerContent(count) {
-    const div = document.createElement('div');
-    div.style.width = '40px';
-    div.style.height = '40px';
-    div.style.borderRadius = '50%';
-    div.style.backgroundColor = '#4a90e2';
-    div.style.border = '3px solid white';
-    div.style.display = 'flex';
-    div.style.alignItems = 'center';
-    div.style.justifyContent = 'center';
-    div.style.color = 'white';
-    div.style.fontWeight = 'bold';
-    div.style.fontSize = '14px';
-    div.style.cursor = 'pointer';
-    div.textContent = count;
-    return div;
-  }
-
   function showStoryPopup(story, marker) {
     popupType = 'story';
     popupData = story;
@@ -200,99 +185,10 @@
 
   function clearMarkers() {
     markers.forEach(marker => {
+      // Explicitly remove event listeners by setting map to null
       marker.setMap(null);
     });
     markers = [];
-  }
-
-  function getDarkMapStyles() {
-    // Google Maps dark theme
-    return [
-      { elementType: 'geometry', stylers: [{ color: '#212121' }] },
-      { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-      { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-      { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
-      {
-        featureType: 'administrative',
-        elementType: 'geometry',
-        stylers: [{ color: '#757575' }],
-      },
-      {
-        featureType: 'administrative.country',
-        elementType: 'labels.text.fill',
-        stylers: [{ color: '#9e9e9e' }],
-      },
-      {
-        featureType: 'administrative.locality',
-        elementType: 'labels.text.fill',
-        stylers: [{ color: '#bdbdbd' }],
-      },
-      {
-        featureType: 'poi',
-        elementType: 'labels.text.fill',
-        stylers: [{ color: '#757575' }],
-      },
-      {
-        featureType: 'poi.park',
-        elementType: 'geometry',
-        stylers: [{ color: '#181818' }],
-      },
-      {
-        featureType: 'poi.park',
-        elementType: 'labels.text.fill',
-        stylers: [{ color: '#616161' }],
-      },
-      {
-        featureType: 'poi.park',
-        elementType: 'labels.text.stroke',
-        stylers: [{ color: '#1b1b1b' }],
-      },
-      {
-        featureType: 'road',
-        elementType: 'geometry.fill',
-        stylers: [{ color: '#2c2c2c' }],
-      },
-      {
-        featureType: 'road',
-        elementType: 'labels.text.fill',
-        stylers: [{ color: '#8a8a8a' }],
-      },
-      {
-        featureType: 'road.arterial',
-        elementType: 'geometry',
-        stylers: [{ color: '#373737' }],
-      },
-      {
-        featureType: 'road.highway',
-        elementType: 'geometry',
-        stylers: [{ color: '#3c3c3c' }],
-      },
-      {
-        featureType: 'road.highway.controlled_access',
-        elementType: 'geometry',
-        stylers: [{ color: '#4e4e4e' }],
-      },
-      {
-        featureType: 'road.local',
-        elementType: 'labels.text.fill',
-        stylers: [{ color: '#616161' }],
-      },
-      {
-        featureType: 'transit',
-        elementType: 'labels.text.fill',
-        stylers: [{ color: '#757575' }],
-      },
-      {
-        featureType: 'water',
-        elementType: 'geometry',
-        stylers: [{ color: '#000000' }],
-      },
-      {
-        featureType: 'water',
-        elementType: 'labels.text.fill',
-        stylers: [{ color: '#3d3d3d' }],
-      },
-    ];
   }
 </script>
 
