@@ -145,6 +145,7 @@ def cluster_locations(locations: list[dict], epsilon_radians: float, min_samples
                 if date > max_date:
                     max_date = date
             date_range = f"{min_date}–{max_date}"
+            print(f"[DEBUG] Cluster date range: {date_range} (from {len(dates)} dated stories out of {len(unique_stories)} total)")
         else:
             date_range = None
 

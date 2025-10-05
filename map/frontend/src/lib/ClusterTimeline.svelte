@@ -15,6 +15,18 @@
     if (cluster.cluster_id?.startsWith('dynamic_') && cluster.stories) {
       clusterDetails = cluster;
       loading = false;
+
+      // Debug: Log date information
+      const dates = cluster.stories.map(s => s.date).filter(d => d);
+      console.log(`[ClusterTimeline] Cluster has ${cluster.stories.length} stories, ${dates.length} with dates`);
+      if (dates.length > 0) {
+        console.log('[ClusterTimeline] Sample dates:', dates.slice(0, 10));
+        const years = dates.map(d => d.match(/\d{4}/)?.[0]).filter(y => y);
+        if (years.length > 0) {
+          console.log('[ClusterTimeline] Date range:', Math.min(...years), '-', Math.max(...years));
+        }
+      }
+
       return;
     }
 
@@ -60,6 +72,7 @@
         maxYear: null,
         yearRange: 0,
         hasTimeline: false,
+        datedCount: 0,
         stories: stories.map(story => ({
           ...story,
           year: null,
@@ -72,19 +85,32 @@
     const maxYear = Math.max(...years);
     const yearRange = Math.max(maxYear - minYear, 1); // Ensure yearRange is at least 1
 
+    // Map stories with their year and position
+    const storiesWithTimeline = stories.map(story => {
+      const storyYear = getYear(story.date);
+      return {
+        ...story,
+        year: storyYear,
+        position: storyYear ? ((storyYear - minYear) / yearRange) * 100 : 50,
+      };
+    });
+
+    // Sort stories by date string (earliest first), undated stories at the end
+    const sortedStories = storiesWithTimeline.sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;  // a goes to end
+      if (!b.date) return -1; // b goes to end
+      // Both have dates - compare as strings (works for ISO dates like "2016-05")
+      return a.date.localeCompare(b.date);
+    });
+
     return {
       minYear,
       maxYear,
       yearRange,
       hasTimeline: true,
-      stories: stories.map(story => {
-        const storyYear = getYear(story.date);
-        return {
-          ...story,
-          year: storyYear,
-          position: storyYear ? ((storyYear - minYear) / yearRange) * 100 : 50,
-        };
-      }),
+      datedCount: years.length,
+      stories: sortedStories,
     };
   }
 </script>
@@ -97,7 +123,12 @@
       <div class="loading">Loading...</div>
     {:else if clusterDetails && timelineData}
       <div class="header">
-        <h2>{clusterDetails.story_count} Stories</h2>
+        <h2>
+          {clusterDetails.story_count} Stories
+          {#if timelineData.hasTimeline}
+            <span class="dated-count">({timelineData.datedCount} with dates)</span>
+          {/if}
+        </h2>
         <p class="summary">{clusterDetails.summary}</p>
       </div>
 
@@ -125,7 +156,7 @@
       {/if}
 
       <div class="story-list">
-        {#each clusterDetails.stories as story (story.story_id)}
+        {#each timelineData.stories as story (story.story_id)}
           <button class="story-card" on:click={() => selectStory(story)}>
             <div class="story-header">
               <h3>{story.title}</h3>
@@ -209,6 +240,12 @@
     font-weight: 600;
     margin: 0 0 12px 0;
     color: #4a90e2;
+  }
+
+  .dated-count {
+    color: #999;
+    font-size: 16px;
+    font-weight: 400;
   }
 
   .summary {
