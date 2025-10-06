@@ -53,6 +53,43 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
         conn.close()
 
 
+def format_date(date_str: str) -> str:
+    """
+    Format ISO date strings in human-friendly format.
+    Examples:
+      2020-01-23 -> Jan 23, 2020
+      2020-01 -> Jan 2020
+      2020 -> 2020
+
+    Handles edge cases like approximate dates (~), ranges (/), and unknown values (XXXX).
+    """
+    if not date_str:
+        return ""
+
+    # Return as-is for special formats that don't fit standard patterns
+    # (these are approximations or ranges that should be shown as-is)
+    if "/" in date_str or "~" in date_str or "XXXX" in date_str:
+        return date_str
+
+    try:
+        parts = date_str.split("-")
+        month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+        if len(parts) == 3:  # YYYY-MM-DD
+            year, month, day = parts
+            month_name = month_names[int(month) - 1]
+            return f"{month_name} {int(day)}, {year}"
+        elif len(parts) == 2:  # YYYY-MM
+            year, month = parts
+            month_name = month_names[int(month) - 1]
+            return f"{month_name} {year}"
+        else:  # Just year or other format
+            return date_str
+    except (ValueError, IndexError):
+        # If we can't parse it, return as-is
+        return date_str
+
+
 def zoom_to_epsilon(zoom: int) -> float:
     """
     Map zoom level to DBSCAN epsilon (in radians for haversine metric).
@@ -142,16 +179,21 @@ def cluster_locations(locations: list[dict], epsilon_radians: float, min_samples
                 unique_stories.append(loc)
 
         # Extract date range efficiently (single pass)
-        dates = [loc.get("date") for loc in unique_stories if loc.get("date")]
-        if dates:
-            min_date = max_date = dates[0]
-            for date in dates[1:]:
-                if date < min_date:
-                    min_date = date
-                if date > max_date:
-                    max_date = date
-            date_range = f"{min_date}–{max_date}"
-            print(f"[DEBUG] Cluster date range: {date_range} (from {len(dates)} dated stories out of {len(unique_stories)} total)")
+        # Filter out invalid/unknown dates (XXXX), then sort to get min/max chronologically
+        all_dates = [loc.get("date") for loc in unique_stories if loc.get("date")]
+        # Only include dates that don't have unknown components (XXXX)
+        valid_dates = sorted([d for d in all_dates if d and "XXXX" not in d])
+
+        if valid_dates:
+            min_date = valid_dates[0]
+            max_date = valid_dates[-1]
+
+            # Format date range in human-friendly way
+            if min_date == max_date:
+                date_range = format_date(min_date)
+            else:
+                date_range = f"{format_date(min_date)}–{format_date(max_date)}"
+            print(f"[DEBUG] Cluster date range: {date_range} (from {len(valid_dates)} dated stories out of {len(unique_stories)} total)")
         else:
             date_range = None
 
@@ -249,7 +291,7 @@ def get_locations(
                     "confidence": row["resolution_confidence"],
                     "title": row["title"],
                     "summary_preview": summary_preview,
-                    "date": row["parsed_date"],
+                    "date": format_date(row["parsed_date"]) if row["parsed_date"] else None,
                 })
 
             print(f"[DEBUG] Found {len(locations)} locations in viewport")
@@ -276,8 +318,7 @@ def get_locations(
                             location_names.add(parts[0].strip())
 
                     location_str = ", ".join(list(location_names)[:3]) if location_names else "this area"
-                    date_str = f" ({cluster['date_range']})" if cluster.get('date_range') else ""
-                    cluster["summary"] = f"{cluster['story_count']} stories in {location_str}{date_str}"
+                    cluster["summary"] = f"{cluster['story_count']} stories in {location_str}"
 
                 response["clusters"] = clusters
                 response["locations"] = noise_points  # Include unclustered locations
@@ -333,7 +374,7 @@ def get_story(story_id: str) -> dict[str, Any]:
                 "story_id": story_row["story_id"],
                 "title": story_row["title"],
                 "summary": story_row["summary"],
-                "parsed_date": story_row["parsed_date"],
+                "parsed_date": format_date(story_row["parsed_date"]) if story_row["parsed_date"] else None,
                 "confidence": story_row["confidence"],
             }
 

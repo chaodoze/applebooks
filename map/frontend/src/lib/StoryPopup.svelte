@@ -1,34 +1,78 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
-  import { selectedStory } from '../stores.js';
+  import { createEventDispatcher, onMount } from 'svelte';
 
   export let story;
 
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
   const dispatch = createEventDispatcher();
 
-  function viewDetails() {
-    selectedStory.set(story);
-    dispatch('close');
-  }
+  let fullStory = null;
+  let loading = true;
+  let error = null;
+
+  onMount(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/story/${story.story_id}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load story: ${response.statusText}`);
+      }
+      fullStory = await response.json();
+    } catch (err) {
+      console.error('Error loading story details:', err);
+      error = err.message;
+    } finally {
+      loading = false;
+    }
+  });
 
   function close() {
     dispatch('close');
   }
+
+  // Format location for display
+  function formatLocation(story) {
+    if (story.address) {
+      return story.address;
+    }
+    if (story.place_name) {
+      return story.place_name;
+    }
+    return null;
+  }
+
+  const location = formatLocation(story);
 </script>
 
 <div class="popup-overlay" on:click={close}>
   <div class="popup" on:click|stopPropagation>
     <button class="close-btn" on:click={close}>&times;</button>
 
-    <h3>{story.title}</h3>
-    {#if story.date}
-      <p class="date">{story.date}</p>
+    {#if loading}
+      <div class="loading-state">
+        <h3>{story.title}</h3>
+        {#if story.date}
+          <p class="date">{story.date}</p>
+        {/if}
+        {#if location}
+          <p class="location">📍 {location}</p>
+        {/if}
+        <p class="loading-text">Loading details...</p>
+      </div>
+    {:else if error}
+      <div class="error-state">
+        <h3>{story.title}</h3>
+        <p class="error-text">Failed to load full details</p>
+      </div>
+    {:else if fullStory}
+      <h3>{fullStory.title}</h3>
+      {#if fullStory.parsed_date}
+        <p class="date">{fullStory.parsed_date}</p>
+      {/if}
+      {#if location}
+        <p class="location">📍 {location}</p>
+      {/if}
+      <p class="summary">{fullStory.summary}</p>
     {/if}
-    <p class="summary">{story.summary_preview}</p>
-
-    <button class="view-details-btn" on:click={viewDetails}>
-      View Details
-    </button>
   </div>
 </div>
 
@@ -89,30 +133,33 @@
   .date {
     color: #999;
     font-size: 13px;
+    margin: 0 0 8px 0;
+  }
+
+  .location {
+    color: #999;
+    font-size: 13px;
     margin: 0 0 12px 0;
+    font-style: italic;
   }
 
   .summary {
     color: #ccc;
     font-size: 14px;
     line-height: 1.6;
-    margin: 0 0 16px 0;
+    margin: 0;
   }
 
-  .view-details-btn {
-    background: #0071e3;
-    border: none;
-    border-radius: 8px;
-    color: white;
-    padding: 10px 20px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s;
-    width: 100%;
+  .loading-text {
+    color: #999;
+    font-size: 13px;
+    font-style: italic;
+    margin: 12px 0 0 0;
   }
 
-  .view-details-btn:hover {
-    background: #0077ed;
+  .error-text {
+    color: #ff6b6b;
+    font-size: 13px;
+    margin: 12px 0 0 0;
   }
 </style>
