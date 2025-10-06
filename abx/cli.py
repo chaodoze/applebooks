@@ -225,6 +225,12 @@ def extract(
                 sys.exit(2)
 
             # Download results
+            if not batch_result["output_file_id"]:
+                console.print("[red]Batch completed but no output_file_id returned[/red]")
+                console.print(f"[yellow]Batch result: {batch_result}[/yellow]")
+                conn.close()
+                sys.exit(2)
+
             results_path = Path(tmpdir) / "batch_results.jsonl"
             download_batch_results(batch_result["output_file_id"], api_key, results_path)
 

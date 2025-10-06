@@ -80,7 +80,20 @@ def migrate_db(db_path: Path) -> None:
     current_version = get_schema_version(conn)
     console.print(f"[cyan]Current schema version: {current_version}[/cyan]")
 
-    if current_version == "1.0":
+    # IMPORTANT: Always check if columns actually exist, don't trust schema_version alone
+    # This handles cases where schema_version was updated but migration failed
+    cursor = conn.execute("PRAGMA table_info(story_locations)")
+    columns = {row[1] for row in cursor.fetchall()}
+
+    needs_v1_1_migration = (
+        "classifier_tier" not in columns or
+        "classifier_reason" not in columns or
+        "resolved_address" not in columns
+    )
+
+    if needs_v1_1_migration:
+        if current_version == "1.1":
+            console.print("[yellow]Schema version is 1.1 but columns are missing - running migration anyway[/yellow]")
         migrate_v1_0_to_v1_1(conn)
         # Update schema version in books table
         conn.execute("UPDATE books SET schema_version = '1.1'")

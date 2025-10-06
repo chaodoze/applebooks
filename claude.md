@@ -99,6 +99,36 @@ datasette library.sqlite -m datasette_metadata.json --port 8001
 
 **Key Insight**: LLMs need explicit examples, not just descriptions. Show, don't tell.
 
+## Critical Bugs Fixed (Oct 2025)
+
+### Migration Bug: Schema Version vs Actual Columns
+**Problem**: `abxgeo/db_migrate.py` trusted `schema_version` field but didn't verify columns actually exist
+- Database marked as v1.1 but `classifier_tier`, `classifier_reason` columns missing
+- Caused geocoding to fail silently: 0/396 locations resolved despite 127 successful API calls
+- UPDATEs failed because columns didn't exist, no error shown to user
+
+**Root Cause**: Migration checked `schema_version == "1.1"` and skipped adding columns
+
+**Fix** (abxgeo/db_migrate.py:73-106):
+```python
+# IMPORTANT: Always check if columns actually exist, don't trust schema_version alone
+cursor = conn.execute("PRAGMA table_info(story_locations)")
+columns = {row[1] for row in cursor.fetchall()}
+
+needs_v1_1_migration = (
+    "classifier_tier" not in columns or
+    "classifier_reason" not in columns or
+    "resolved_address" not in columns
+)
+
+if needs_v1_1_migration:
+    if current_version == "1.1":
+        console.print("[yellow]Schema version is 1.1 but columns are missing - running migration anyway[/yellow]")
+    migrate_v1_0_to_v1_1(conn)
+```
+
+**Lesson**: Never trust version markers alone - always verify actual schema state before skipping migrations.
+
 ## Notes
 - Always run `baml-cli generate` after editing BAML files
 - Uses OpenAI Responses API (not Chat Completions)
